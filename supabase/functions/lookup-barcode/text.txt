@@ -1,0 +1,175 @@
+
+// index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>iPad Pro Part Assignment App</title>
+	<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+	<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+	<div class="container mx-auto p-4 flex-1 flex flex-col">
+		<h1 class="text-2xl font-bold mb-4 text-center">Part Assignment App</h1>
+		<div class="flex flex-col md:flex-row gap-4 mb-4">
+			<div class="flex-1 bg-white rounded shadow p-4">
+				<h2 class="font-semibold mb-2">Scan Barcode</h2>
+				<div id="qr-reader" class="w-full h-64"></div>
+				<div class="mt-2">
+					<span class="font-semibold">Scanned Barcode:</span>
+					<span id="barcode-value" class="ml-2 text-blue-600"></span>
+				</div>
+			</div>
+			<div class="flex-1 bg-white rounded shadow p-4 flex flex-col justify-between">
+				<div>
+					<label class="block font-semibold mb-1" for="wo-input">Work Order (WO) Number</label>
+					<input id="wo-input" type="text" class="w-full border rounded px-2 py-1 mb-2" placeholder="Enter WO number">
+					<div class="mb-2">
+						<span class="font-semibold">Part Name:</span> <span id="part-name" class="ml-1"></span><br>
+						<span class="font-semibold">Description:</span> <span id="part-desc" class="ml-1"></span><br>
+						<span class="font-semibold">Stock Level:</span> <span id="part-stock" class="ml-1"></span>
+					</div>
+				</div>
+				<button id="assign-btn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mt-2">Assign Part to WO</button>
+			</div>
+		</div>
+		<div class="flex justify-end mb-2">
+			<button id="export-btn" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Export to CSV</button>
+		</div>
+		<div class="bg-white rounded shadow p-4 overflow-x-auto">
+			<h2 class="font-semibold mb-2">Assigned Parts Log</h2>
+			<table class="min-w-full text-sm">
+				<thead>
+					<tr class="bg-gray-200">
+						<th class="px-2 py-1">Timestamp</th>
+						<th class="px-2 py-1">WO Number</th>
+						<th class="px-2 py-1">Barcode</th>
+						<th class="px-2 py-1">Part Name</th>
+						<th class="px-2 py-1">Description</th>
+						<th class="px-2 py-1">Stock Level</th>
+					</tr>
+				</thead>
+				<tbody id="logs-table-body">
+				</tbody>
+			</table>
+		</div>
+	</div>
+	<script src="app.js"></script>
+</body>
+</html>
+
+// app.js
+let masterPartsList = [];
+let logs = [];
+let lastScannedBarcode = '';
+
+// Load master_parts_list.json
+fetch('master_parts_list.json')
+	.then(res => res.json())
+	.then(data => { masterPartsList = data; })
+	.catch(() => { masterPartsList = []; });
+
+function findPartByBarcode(barcode) {
+	return masterPartsList.find(part => part.Barcode === barcode);
+}
+
+function updatePartDetails(part) {
+	document.getElementById('part-name').textContent = part ? part.PartName : '';
+	document.getElementById('part-desc').textContent = part ? part.Description : '';
+	document.getElementById('part-stock').textContent = part ? part.StockLevel : '';
+}
+
+function updateLogsTable() {
+	const tbody = document.getElementById('logs-table-body');
+	tbody.innerHTML = '';
+	logs.forEach(log => {
+		const tr = document.createElement('tr');
+		tr.innerHTML = `
+			<td class="border px-2 py-1">${log.timestamp}</td>
+			<td class="border px-2 py-1">${log.woNumber}</td>
+			<td class="border px-2 py-1">${log.barcode}</td>
+			<td class="border px-2 py-1">${log.partName}</td>
+			<td class="border px-2 py-1">${log.description}</td>
+			<td class="border px-2 py-1">${log.stockLevel}</td>
+		`;
+		tbody.appendChild(tr);
+	});
+}
+
+function exportLogsToCSV() {
+	if (!logs.length) return;
+	const headers = ['Timestamp','WO Number','Barcode','Part Name','Description','Stock Level'];
+	const rows = logs.map(log => [log.timestamp, log.woNumber, log.barcode, log.partName, log.description, log.stockLevel]);
+	let csvContent = headers.join(',') + '\n' + rows.map(r => r.map(x => '"'+(x||'')+'"').join(',')).join('\n');
+	const blob = new Blob([csvContent], { type: 'text/csv' });
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = 'assigned_parts_log.csv';
+	document.body.appendChild(a);
+	a.click();
+	document.body.removeChild(a);
+	URL.revokeObjectURL(url);
+}
+
+document.getElementById('assign-btn').addEventListener('click', () => {
+	const woNumber = document.getElementById('wo-input').value.trim();
+	if (!lastScannedBarcode || !woNumber) return;
+	const part = findPartByBarcode(lastScannedBarcode);
+	if (!part) return;
+	const log = {
+		timestamp: new Date().toLocaleString(),
+		woNumber,
+		barcode: lastScannedBarcode,
+		partName: part.PartName,
+		description: part.Description,
+		stockLevel: part.StockLevel
+	};
+	logs.push(log);
+	updateLogsTable();
+});
+
+document.getElementById('export-btn').addEventListener('click', exportLogsToCSV);
+
+// html5-qrcode setup
+function onScanSuccess(decodedText, decodedResult) {
+	lastScannedBarcode = decodedText;
+	document.getElementById('barcode-value').textContent = decodedText;
+	const part = findPartByBarcode(decodedText);
+	updatePartDetails(part);
+}
+
+function onScanFailure(error) {
+	// Optionally handle scan errors
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+	const html5QrCode = new Html5Qrcode("qr-reader");
+	Html5Qrcode.getCameras().then(cameras => {
+		if (cameras && cameras.length) {
+			html5QrCode.start(
+				{ facingMode: "environment" },
+				{ fps: 10, qrbox: 250 },
+				onScanSuccess,
+				onScanFailure
+			);
+		}
+	});
+});
+
+// master_parts_list.json (template)
+[
+	{
+		"Barcode": "1234567890123",
+		"PartName": "Widget A",
+		"Description": "Standard widget for assembly.",
+		"StockLevel": 42
+	},
+	{
+		"Barcode": "9876543210987",
+		"PartName": "Gadget B",
+		"Description": "Replacement gadget for repair.",
+		"StockLevel": 17
+	}
+]
