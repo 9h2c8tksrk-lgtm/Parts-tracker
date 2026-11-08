@@ -1,0 +1,14 @@
+[
+  {
+    "Barcode": "1234567890123",
+    "PartName": "Widget A",
+    "Description": "Standard widget for assembly.",
+    "StockLevel": 42
+  },
+  {
+    "Barcode": "9876543210987",
+    "PartName": "Gadget B",
+    "Description": "Replacement gadget for repair.",
+    "StockLevel": 17
+  }
+]

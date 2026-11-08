@@ -1,0 +1,2 @@
+[functions.lookup-barcode]
+verify_jwt = true
