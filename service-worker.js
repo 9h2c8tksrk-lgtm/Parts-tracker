@@ -38,7 +38,7 @@ self.addEventListener('fetch', event => {
 
 	const url = new URL(request.url);
 	const isAppShell = url.origin === self.location.origin;
-	const isCdnAsset = cdnAssets.some(asset => new URL(asset).origin === url.origin);
+	const isCdnAsset = cdnAssets.some(asset => asset === url.href);
 	if (!isAppShell && !isCdnAsset) return;
 
 	event.respondWith((async () => {

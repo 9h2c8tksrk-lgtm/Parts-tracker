@@ -50,16 +50,16 @@ function saveOfflineSnapshot(userId) {
 
 async function loadOfflineSnapshot(userId) {
 	const snapshot = await offlineStore('snapshots', 'readonly', store => store.get(userId));
-	if (!snapshot) return false;
-	parts = snapshot.parts;
-	assignments = snapshot.assignments;
+	parts = snapshot?.parts ?? [];
+	assignments = snapshot?.assignments ?? [];
 	const pending = await offlineStore('pending_assignments', 'readonly', store => store.getAll());
-	pending.filter(assignment => assignment.created_by === userId).forEach(assignment => {
+	const userPending = pending.filter(assignment => assignment.created_by === userId);
+	userPending.forEach(assignment => {
 		if (!assignments.some(saved => saved.id === assignment.id)) assignments.push(assignment);
 	});
 	assignments.sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
 	renderAssignments();
-	return true;
+	return Boolean(snapshot || userPending.length);
 }
 
 async function queueOfflineAssignment(assignment) {
@@ -88,9 +88,17 @@ async function syncPendingAssignments() {
 			created_by: assignment.created_by,
 			assigned_by: assignment.assigned_by
 		});
-		if (error && error.code !== '23505') throw error;
+		if (error && error.code !== '23505' && !isNetworkFailure(error)) throw error;
+		if (error && isNetworkFailure(error)) throw error;
 		await offlineStore('pending_assignments', 'readwrite', store => store.delete(assignment.id));
+		assignments = assignments.map(item => item.id === assignment.id
+			? { ...item, pending_offline: false }
+			: item);
 	}
+}
+
+function isNetworkFailure(error) {
+	return error instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(error?.message ?? '');
 }
 
 function setStatus(message, isError = false, target = 'app-status') {
@@ -154,7 +162,9 @@ async function loadSharedData() {
 
 	setStatus('Loading shared parts and assignments...');
 	try {
+		await loadOfflineSnapshot(currentUser.id);
 		await syncPendingAssignments();
+		await saveOfflineSnapshot(currentUser.id);
 		const [partsResult, assignmentsResult] = await Promise.all([
 			supabaseClient.from('parts').select('barcode, part_name, description, stock_level').order('part_name'),
 			supabaseClient.from('assigned_parts')
@@ -210,6 +220,17 @@ function displayAuth(session) {
 	loadSharedData().catch(error => setStatus(`Could not load shared data: ${error.message}`, true));
 	subscribeToSharedChanges();
 	startScanner();
+}
+
+function updateConnectionStatus() {
+	const status = byId('connection-status');
+	status.textContent = navigator.onLine
+		? 'Online: data syncs with the shared server. Cached data is available for offline use.'
+		: 'Offline: using saved data. Assignments are queued on this device until connection returns.';
+	status.classList.toggle('bg-yellow-100', !navigator.onLine);
+	status.classList.toggle('border-yellow-400', !navigator.onLine);
+	status.classList.toggle('bg-green-100', navigator.onLine);
+	status.classList.toggle('border-green-400', navigator.onLine);
 }
 
 function subscribeToSharedChanges() {
@@ -346,6 +367,10 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 async function addPart(event) {
 	event.preventDefault();
 	if (!currentUser || !byId('barcode-value').textContent) return;
+	if (!navigator.onLine) {
+		setStatus('Adding a new part requires an internet connection.', true);
+		return;
+	}
 
 	const barcode = byId('barcode-value').textContent;
 	const part = {
@@ -373,6 +398,7 @@ async function addPart(event) {
 
 	if (!findPartByBarcode(data.barcode)) parts.push(data);
 	renderPart(data);
+	await saveOfflineSnapshot(currentUser.id).catch(() => {});
 	setStatus('Part added to the shared parts list.');
 }
 
@@ -415,7 +441,7 @@ async function assignPart(event) {
 	}
 	const { data, error } = result;
 	if (error) {
-		if (!navigator.onLine || error.message === 'Failed to fetch') {
+		if (!navigator.onLine || isNetworkFailure(error)) {
 			await queueOfflineAssignment(newAssignment);
 			return;
 		}
@@ -428,6 +454,7 @@ async function assignPart(event) {
 	assignments.sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
 	assignments = assignments.slice(0, 1000);
 	renderAssignments();
+	await saveOfflineSnapshot(currentUser.id).catch(() => {});
 	setStatus('Part assignment saved for all users.');
 }
 
@@ -476,6 +503,20 @@ async function startScanner() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+	updateConnectionStatus();
+	window.addEventListener('online', () => {
+		updateConnectionStatus();
+		if (currentUser) loadSharedData().catch(error => setStatus(`Could not sync offline data: ${error.message}`, true));
+	});
+	window.addEventListener('offline', () => {
+		updateConnectionStatus();
+		if (currentUser) loadSharedData().catch(error => setStatus(`Could not load saved data: ${error.message}`, true));
+	});
+	if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+		navigator.serviceWorker.register('./service-worker.js')
+			.catch(() => setStatus('Offline app caching could not be enabled. Use a secure HTTPS or localhost address.', true));
+	}
+
 	const config = window.SUPABASE_CONFIG;
 	if (!window.supabase?.createClient || !config?.url || !config?.anonKey) {
 		byId('setup-message').textContent = 'Supabase is not configured. Add your project URL and publishable/anon key to config.js, then reload this page. See README.md for setup instructions.';
