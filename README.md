@@ -3,6 +3,7 @@
 ## Features
 
 - Shared part catalog and assignment log, updated live for signed-in users.
+- Optional asset number recorded with each part assignment.
 - Email/password sign-up, sign-in, and sign-out.
 - Camera scanning or manual entry of UPC, EAN, and GTIN barcodes.
 - Authenticated barcode lookup through UPCitemdb. Results are suggestions that users review before adding.
@@ -13,7 +14,7 @@ The public UPCitemdb Explorer service allows 100 combined requests per day and u
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Open the project's SQL Editor and run [`supabase/schema.sql`](./supabase/schema.sql). It creates the shared tables, row-level security policies, and two sample parts.
+2. Open the project's SQL Editor and run [`supabase/schema.sql`](./supabase/schema.sql). It creates or updates the shared tables, row-level security policies, and two sample parts.
 3. Copy the project URL and its public publishable/anon key into `config.js`:
 
    ```js

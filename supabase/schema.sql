@@ -10,6 +10,7 @@ create table if not exists public.assigned_parts (
 	id uuid primary key default gen_random_uuid(),
 	created_at timestamptz not null default now(),
 	wo_number text not null check (length(trim(wo_number)) > 0),
+	asset_number text not null default '' check (length(asset_number) <= 200),
 	barcode text not null,
 	part_name text not null,
 	description text not null default '',
@@ -17,6 +18,9 @@ create table if not exists public.assigned_parts (
 	created_by uuid not null references auth.users(id),
 	assigned_by text not null default ''
 );
+
+alter table public.assigned_parts
+	add column if not exists asset_number text not null default '' check (length(asset_number) <= 200);
 
 create or replace function public.set_assignment_email()
 returns trigger

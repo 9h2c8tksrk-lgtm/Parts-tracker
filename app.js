@@ -38,6 +38,7 @@ function renderAssignments() {
 		const row = document.createElement('tr');
 		appendCell(row, new Date(assignment.created_at).toLocaleString());
 		appendCell(row, assignment.wo_number);
+		appendCell(row, assignment.asset_number);
 		appendCell(row, assignment.barcode);
 		appendCell(row, assignment.part_name);
 		appendCell(row, assignment.description);
@@ -65,7 +66,7 @@ async function loadSharedData() {
 	const [partsResult, assignmentsResult] = await Promise.all([
 		supabaseClient.from('parts').select('barcode, part_name, description, stock_level').order('part_name'),
 		supabaseClient.from('assigned_parts')
-			.select('id, created_at, wo_number, barcode, part_name, description, stock_level, created_by, assigned_by')
+			.select('id, created_at, wo_number, asset_number, barcode, part_name, description, stock_level, created_by, assigned_by')
 			.order('created_at', { ascending: false })
 			.limit(1000)
 	]);
@@ -104,6 +105,7 @@ function displayAuth(session) {
 		byId('barcode-value').textContent = '';
 		byId('barcode-input').value = '';
 		byId('wo-input').value = '';
+		byId('asset-number-input').value = '';
 		byId('new-part-form').classList.add('hidden');
 		byId('assignment-form').classList.add('hidden');
 		if (html5QrCode?.isScanning) {
@@ -149,10 +151,11 @@ function exportAssignmentsToCSV() {
 		setStatus('There are no assignments to export.');
 		return;
 	}
-	const headers = ['Timestamp', 'WO Number', 'Barcode', 'Part Name', 'Description', 'Stock Level', 'Assigned By'];
+	const headers = ['Timestamp', 'WO Number', 'Asset Number', 'Barcode', 'Part Name', 'Description', 'Stock Level', 'Assigned By'];
 	const rows = assignments.map(assignment => [
 		assignment.created_at,
 		assignment.wo_number,
+		assignment.asset_number,
 		assignment.barcode,
 		assignment.part_name,
 		assignment.description,
@@ -285,6 +288,7 @@ async function assignPart(event) {
 	}
 	const newAssignment = {
 		wo_number: woNumber,
+		asset_number: byId('asset-number-input').value.trim(),
 		barcode: selectedPart.barcode,
 		part_name: selectedPart.part_name,
 		description: selectedPart.description,
@@ -293,7 +297,7 @@ async function assignPart(event) {
 		assigned_by: currentUser.email
 	};
 	const { data, error } = await supabaseClient.from('assigned_parts').insert(newAssignment)
-		.select('id, created_at, wo_number, barcode, part_name, description, stock_level, created_by, assigned_by')
+		.select('id, created_at, wo_number, asset_number, barcode, part_name, description, stock_level, created_by, assigned_by')
 		.single();
 	if (error) {
 		setStatus(`Could not save the assignment: ${error.message}`, true);
@@ -301,6 +305,7 @@ async function assignPart(event) {
 	}
 
 	if (!assignments.some(assignment => assignment.id === data.id)) assignments.push(data);
+	byId('asset-number-input').value = '';
 	assignments.sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
 	assignments = assignments.slice(0, 1000);
 	renderAssignments();
