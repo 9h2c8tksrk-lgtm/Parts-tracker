@@ -9,8 +9,89 @@ let html5QrCode;
 let scannerStarting = false;
 let realtimeChannel;
 let lookupRequest = 0;
+let offlineDatabase;
 
 const byId = id => document.getElementById(id);
+
+function openOfflineDatabase() {
+	if (!('indexedDB' in window)) return Promise.reject(new Error('Offline storage is not supported by this browser.'));
+	if (offlineDatabase) return offlineDatabase;
+	offlineDatabase = new Promise((resolve, reject) => {
+		const request = indexedDB.open('parts-tracker-offline', 1);
+		request.onupgradeneeded = () => {
+			const database = request.result;
+			database.createObjectStore('snapshots', { keyPath: 'userId' });
+			database.createObjectStore('pending_assignments', { keyPath: 'id' });
+		};
+		request.onsuccess = () => resolve(request.result);
+		request.onerror = () => reject(request.error);
+	});
+	return offlineDatabase;
+}
+
+async function offlineStore(storeName, mode, action) {
+	const database = await openOfflineDatabase();
+	return new Promise((resolve, reject) => {
+		const transaction = database.transaction(storeName, mode);
+		const request = action(transaction.objectStore(storeName));
+		request.onsuccess = () => resolve(request.result);
+		request.onerror = () => reject(request.error);
+	});
+}
+
+function saveOfflineSnapshot(userId) {
+	return offlineStore('snapshots', 'readwrite', store => store.put({
+		userId,
+		parts,
+		assignments,
+		savedAt: new Date().toISOString()
+	}));
+}
+
+async function loadOfflineSnapshot(userId) {
+	const snapshot = await offlineStore('snapshots', 'readonly', store => store.get(userId));
+	if (!snapshot) return false;
+	parts = snapshot.parts;
+	assignments = snapshot.assignments;
+	const pending = await offlineStore('pending_assignments', 'readonly', store => store.getAll());
+	pending.filter(assignment => assignment.created_by === userId).forEach(assignment => {
+		if (!assignments.some(saved => saved.id === assignment.id)) assignments.push(assignment);
+	});
+	assignments.sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
+	renderAssignments();
+	return true;
+}
+
+async function queueOfflineAssignment(assignment) {
+	assignment.pending_offline = true;
+	await offlineStore('pending_assignments', 'readwrite', store => store.put(assignment));
+	assignments.unshift(assignment);
+	await saveOfflineSnapshot(currentUser.id);
+	byId('asset-number-input').value = '';
+	renderAssignments();
+	setStatus('Assignment saved on this device. It will sync when you are back online.');
+}
+
+async function syncPendingAssignments() {
+	if (!currentUser || !navigator.onLine) return;
+	const pending = await offlineStore('pending_assignments', 'readonly', store => store.getAll());
+	for (const assignment of pending.filter(item => item.created_by === currentUser.id)) {
+		const { error } = await supabaseClient.from('assigned_parts').insert({
+			id: assignment.id,
+			created_at: assignment.created_at,
+			wo_number: assignment.wo_number,
+			asset_number: assignment.asset_number,
+			barcode: assignment.barcode,
+			part_name: assignment.part_name,
+			description: assignment.description,
+			stock_level: assignment.stock_level,
+			created_by: assignment.created_by,
+			assigned_by: assignment.assigned_by
+		});
+		if (error && error.code !== '23505') throw error;
+		await offlineStore('pending_assignments', 'readwrite', store => store.delete(assignment.id));
+	}
+}
 
 function setStatus(message, isError = false, target = 'app-status') {
 	const status = byId(target);
@@ -39,6 +120,7 @@ function renderAssignments() {
 		appendCell(row, new Date(assignment.created_at).toLocaleString());
 		appendCell(row, assignment.wo_number);
 		appendCell(row, assignment.asset_number);
+		appendCell(row, assignment.pending_offline ? 'Pending sync' : 'Synced');
 		appendCell(row, assignment.barcode);
 		appendCell(row, assignment.part_name);
 		appendCell(row, assignment.description);
@@ -62,28 +144,39 @@ function findPartByBarcode(barcode) {
 }
 
 async function loadSharedData() {
+	if (!navigator.onLine) {
+		const hasSnapshot = await loadOfflineSnapshot(currentUser.id);
+		setStatus(hasSnapshot
+			? 'Offline mode: showing saved data. New assignments will sync when connected.'
+			: 'Offline mode: no saved data yet. Connect and sign in to download the parts list.', !hasSnapshot);
+		return;
+	}
+
 	setStatus('Loading shared parts and assignments...');
-	const [partsResult, assignmentsResult] = await Promise.all([
-		supabaseClient.from('parts').select('barcode, part_name, description, stock_level').order('part_name'),
-		supabaseClient.from('assigned_parts')
-			.select('id, created_at, wo_number, asset_number, barcode, part_name, description, stock_level, created_by, assigned_by')
-			.order('created_at', { ascending: false })
-			.limit(1000)
-	]);
+	try {
+		await syncPendingAssignments();
+		const [partsResult, assignmentsResult] = await Promise.all([
+			supabaseClient.from('parts').select('barcode, part_name, description, stock_level').order('part_name'),
+			supabaseClient.from('assigned_parts')
+				.select('id, created_at, wo_number, asset_number, barcode, part_name, description, stock_level, created_by, assigned_by')
+				.order('created_at', { ascending: false })
+				.limit(1000)
+		]);
 
-	if (partsResult.error) {
-		setStatus(`Could not load the shared parts list: ${partsResult.error.message}`, true);
-		return;
-	}
-	if (assignmentsResult.error) {
-		setStatus(`Could not load the shared assignment log: ${assignmentsResult.error.message}`, true);
-		return;
-	}
+		if (partsResult.error) throw partsResult.error;
+		if (assignmentsResult.error) throw assignmentsResult.error;
 
-	parts = partsResult.data;
-	assignments = assignmentsResult.data;
-	renderAssignments();
-	setStatus('');
+		parts = partsResult.data;
+		assignments = assignmentsResult.data;
+		renderAssignments();
+		await saveOfflineSnapshot(currentUser.id);
+		setStatus('');
+	} catch (error) {
+		const hasSnapshot = await loadOfflineSnapshot(currentUser.id).catch(() => false);
+		setStatus(hasSnapshot
+			? 'Could not reach the server. Showing saved data; pending assignments will sync when connected.'
+			: `Could not load shared data: ${error.message}`, !hasSnapshot);
+	}
 }
 
 function displayAuth(session) {
@@ -243,6 +336,10 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 		showUnknownBarcode('This barcode is not a UPC/EAN/GTIN format supported by the public lookup. Enter the part details manually.');
 		return;
 	}
+	if (!navigator.onLine) {
+		showUnknownBarcode('This part is not in the saved catalog. Internet lookup and adding new parts require a connection.');
+		return;
+	}
 	await lookupInternet(barcode, requestId);
 }
 
@@ -266,7 +363,9 @@ async function addPart(event) {
 		.select('barcode, part_name, description, stock_level')
 		.single();
 	if (error) {
-		setStatus(error.code === '23505'
+		setStatus(!navigator.onLine
+			? 'Adding a new part requires an internet connection.'
+			: error.code === '23505'
 			? 'Another user has already added this barcode. Refresh the shared list and look it up again.'
 			: `Could not add the part: ${error.message}`, true);
 		return;
@@ -287,6 +386,8 @@ async function assignPart(event) {
 		return;
 	}
 	const newAssignment = {
+		id: crypto.randomUUID(),
+		created_at: new Date().toISOString(),
 		wo_number: woNumber,
 		asset_number: byId('asset-number-input').value.trim(),
 		barcode: selectedPart.barcode,
@@ -296,10 +397,28 @@ async function assignPart(event) {
 		created_by: currentUser.id,
 		assigned_by: currentUser.email
 	};
-	const { data, error } = await supabaseClient.from('assigned_parts').insert(newAssignment)
-		.select('id, created_at, wo_number, asset_number, barcode, part_name, description, stock_level, created_by, assigned_by')
-		.single();
+	if (!navigator.onLine) {
+		await queueOfflineAssignment(newAssignment);
+		return;
+	}
+	let result;
+	try {
+		result = await supabaseClient.from('assigned_parts').insert(newAssignment)
+			.select('id, created_at, wo_number, asset_number, barcode, part_name, description, stock_level, created_by, assigned_by')
+			.single();
+	} catch (error) {
+		if (error instanceof TypeError || !navigator.onLine) {
+			await queueOfflineAssignment(newAssignment);
+			return;
+		}
+		throw error;
+	}
+	const { data, error } = result;
 	if (error) {
+		if (!navigator.onLine || error.message === 'Failed to fetch') {
+			await queueOfflineAssignment(newAssignment);
+			return;
+		}
 		setStatus(`Could not save the assignment: ${error.message}`, true);
 		return;
 	}
