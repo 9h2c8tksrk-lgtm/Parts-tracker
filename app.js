@@ -88,8 +88,7 @@ async function syncPendingAssignments() {
 			created_by: assignment.created_by,
 			assigned_by: assignment.assigned_by
 		});
-		if (error && error.code !== '23505' && !isNetworkFailure(error)) throw error;
-		if (error && isNetworkFailure(error)) throw error;
+		if (error && error.code !== '23505') throw error;
 		await offlineStore('pending_assignments', 'readwrite', store => store.delete(assignment.id));
 		assignments = assignments.map(item => item.id === assignment.id
 			? { ...item, pending_offline: false }
@@ -153,7 +152,7 @@ function findPartByBarcode(barcode) {
 
 async function loadSharedData() {
 	if (!navigator.onLine) {
-		const hasSnapshot = await loadOfflineSnapshot(currentUser.id);
+		const hasSnapshot = await loadOfflineSnapshot(currentUser.id).catch(() => false);
 		setStatus(hasSnapshot
 			? 'Offline mode: showing saved data. New assignments will sync when connected.'
 			: 'Offline mode: no saved data yet. Connect and sign in to download the parts list.', !hasSnapshot);
@@ -162,9 +161,14 @@ async function loadSharedData() {
 
 	setStatus('Loading shared parts and assignments...');
 	try {
-		await loadOfflineSnapshot(currentUser.id);
-		await syncPendingAssignments();
-		await saveOfflineSnapshot(currentUser.id);
+		await loadOfflineSnapshot(currentUser.id).catch(() => false);
+		let syncError;
+		try {
+			await syncPendingAssignments();
+		} catch (error) {
+			syncError = error;
+		}
+		await saveOfflineSnapshot(currentUser.id).catch(() => {});
 		const [partsResult, assignmentsResult] = await Promise.all([
 			supabaseClient.from('parts').select('barcode, part_name, description, stock_level').order('part_name'),
 			supabaseClient.from('assigned_parts')
@@ -179,8 +183,10 @@ async function loadSharedData() {
 		parts = partsResult.data;
 		assignments = assignmentsResult.data;
 		renderAssignments();
-		await saveOfflineSnapshot(currentUser.id);
-		setStatus('');
+		await saveOfflineSnapshot(currentUser.id).catch(() => {});
+		setStatus(syncError
+			? `Shared data loaded, but queued assignments could not sync: ${syncError.message}`
+			: '');
 	} catch (error) {
 		const hasSnapshot = await loadOfflineSnapshot(currentUser.id).catch(() => false);
 		setStatus(hasSnapshot
