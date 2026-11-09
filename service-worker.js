@@ -11,11 +11,15 @@ self.addEventListener('install', event => {
 		const cache = await caches.open(cacheName);
 		await cache.addAll(appShell);
 		await Promise.all(cdnAssets.map(async url => {
+			const controller = new AbortController();
+			const timeout = setTimeout(() => controller.abort(), 8000);
 			try {
-				const response = await fetch(url, { mode: 'no-cors' });
+				const response = await fetch(url, { mode: 'no-cors', signal: controller.signal });
 				await cache.put(url, response);
 			} catch {
 				// The app shell can still be cached when a CDN is unavailable.
+			} finally {
+				clearTimeout(timeout);
 			}
 		}));
 		await self.skipWaiting();
@@ -44,7 +48,6 @@ self.addEventListener('fetch', event => {
 	event.respondWith((async () => {
 		const cache = await caches.open(cacheName);
 		const cached = await cache.match(request);
-		if (cached) return cached;
 
 		try {
 			const response = await fetch(request);
@@ -53,6 +56,7 @@ self.addEventListener('fetch', event => {
 			}
 			return response;
 		} catch (error) {
+			if (cached) return cached;
 			if (request.mode === 'navigate') {
 				const fallback = await cache.match('./index.html');
 				if (fallback) return fallback;
