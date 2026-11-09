@@ -35,6 +35,7 @@
 				<p>Signed in as <span id="current-user" class="font-semibold"></span></p>
 				<button id="signout-btn" type="button" class="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700">Sign out</button>
 			</div>
+			<p id="connection-status" class="bg-yellow-100 border border-yellow-400 rounded p-3 mb-4" role="status"></p>
 			<p id="app-status" class="hidden bg-blue-100 border border-blue-300 rounded p-3 mb-4" role="status"></p>
 
 			<div class="grid md:grid-cols-2 gap-4 mb-4">
@@ -69,6 +70,8 @@
 					<form id="assignment-form" class="border-t pt-3">
 						<label class="block font-semibold mb-1" for="wo-input">Work order number</label>
 						<input id="wo-input" type="text" maxlength="200" required class="w-full border rounded px-2 py-2 mb-2" placeholder="Enter WO number">
+						<label class="block font-semibold mb-1" for="asset-number-input">Asset number (optional)</label>
+						<input id="asset-number-input" type="text" maxlength="200" class="w-full border rounded px-2 py-2 mb-2" placeholder="Enter asset number">
 						<button id="assign-btn" type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Assign part to WO</button>
 					</form>
 				</section>
@@ -84,6 +87,8 @@
 						<tr class="bg-gray-200">
 							<th class="text-left px-2 py-1">Timestamp</th>
 							<th class="text-left px-2 py-1">WO Number</th>
+							<th class="text-left px-2 py-1">Asset Number</th>
+							<th class="text-left px-2 py-1">Sync Status</th>
 							<th class="text-left px-2 py-1">Barcode</th>
 							<th class="text-left px-2 py-1">Part Name</th>
 							<th class="text-left px-2 py-1">Description</th>

@@ -3,17 +3,25 @@
 ## Features
 
 - Shared part catalog and assignment log, updated live for signed-in users.
+- Optional asset number recorded with each part assignment.
 - Email/password sign-up, sign-in, and sign-out.
 - Camera scanning or manual entry of UPC, EAN, and GTIN barcodes.
 - Authenticated barcode lookup through UPCitemdb. Results are suggestions that users review before adding.
 - CSV export of the shared assignment log.
+- Offline access to the previously loaded catalog and assignment log, with queued assignment sync.
 
 The public UPCitemdb Explorer service allows 100 combined requests per day and up to 6 requests per minute; its free-tier limits are IP-based. Public lookup coverage is incomplete, especially for industrial parts; unmatched barcodes can be added manually.
+
+## Offline use
+
+Open the app online at its HTTPS address (or `localhost`) at least once, sign in, and allow the app and its data to load. After that, a previously signed-in user can reopen it without internet, view the last saved parts and assignment log, scan or enter barcodes in that saved catalog, and queue part assignments on the device. Queued assignments sync automatically when the connection returns and the signed-in session is still valid. Keep the app open briefly after reconnecting to let synchronization finish.
+
+Offline mode does not support first-time sign-in, adding parts to the shared catalog, UPCitemdb lookups, or live updates from other users. Cached data and pending assignments are stored in that browser on that device; they are not a backup or shared until synchronization succeeds. Browser storage can be cleared by device or browser settings.
 
 ## Supabase setup
 
 1. Create a Supabase project.
-2. Open the project's SQL Editor and run [`supabase/schema.sql`](./supabase/schema.sql). It creates the shared tables, row-level security policies, and two sample parts.
+2. Open the project's SQL Editor and run [`supabase/schema.sql`](./supabase/schema.sql). It creates or updates the shared tables, row-level security policies, and two sample parts.
 3. Copy the project URL and its public publishable/anon key into `config.js`:
 
    ```js
