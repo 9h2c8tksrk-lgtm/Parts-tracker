@@ -488,7 +488,16 @@ async function startScanner() {
 	if (!currentUser || scannerStarting || typeof Html5Qrcode === 'undefined' || html5QrCode?.isScanning) return;
 	scannerStarting = true;
 	try {
-		html5QrCode ??= new Html5Qrcode('qr-reader');
+		const formats = Html5QrcodeSupportedFormats;
+		html5QrCode ??= new Html5Qrcode('qr-reader', {
+			useBarCodeDetectorIfSupported: true,
+			verbose: false,
+			formatsToSupport: [
+				formats.EAN_13, formats.EAN_8, formats.UPC_A, formats.UPC_E, formats.UPC_EAN_EXTENSION,
+				formats.CODE_128, formats.CODE_39, formats.CODE_93, formats.ITF, formats.CODABAR,
+				formats.QR_CODE, formats.DATA_MATRIX
+			]
+		});
 		const cameras = await Html5Qrcode.getCameras();
 		if (!currentUser) return;
 		if (!cameras?.length) {
@@ -496,8 +505,18 @@ async function startScanner() {
 			return;
 		}
 		await html5QrCode.start(
-			{ facingMode: 'environment' },
-			{ fps: 10, qrbox: 250 },
+			{
+				facingMode: 'environment',
+				width: { ideal: 1920 },
+				height: { ideal: 1080 },
+				advanced: [{ focusMode: 'continuous' }]
+			},
+			{
+				fps: 25,
+				// Wide box suits 1D barcodes and scales with the viewfinder
+				qrbox: (width, height) => ({ width: Math.floor(width * 0.9), height: Math.floor(Math.min(height, width) * 0.5) }),
+				disableFlip: true
+			},
 			decodedText => selectBarcode(decodedText),
 			() => {}
 		);
