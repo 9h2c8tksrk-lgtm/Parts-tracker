@@ -521,7 +521,7 @@ async function startScanner() {
 			() => {}
 		);
 	} catch (error) {
-		setStatus(`Camera unavailable: ${error.message}. You can enter a barcode manually.`);
+		setStatus(`Camera unavailable: ${error?.message || error || 'permission denied or no camera found'}. You can enter a barcode manually.`);
 	} finally {
 		scannerStarting = false;
 	}
