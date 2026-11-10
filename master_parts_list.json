@@ -6,9 +6,9 @@
     "StockLevel": 42
   },
   {
-    "Barcode": "9876543210987",
-    "PartName": "Gadget B",
-    "Description": "Replacement gadget for repair.",
+    "Barcode": "MABCABF147",
+    "PartName": "MABCABF147",
+    "Description": "HOSE BARB STR 1/2 HOSE X 1/4 NPT.",
     "StockLevel": 17
   }
 ]
