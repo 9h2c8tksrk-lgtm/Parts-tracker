@@ -505,14 +505,16 @@ async function startScanner() {
 			return;
 		}
 		await html5QrCode.start(
-			{
-				facingMode: 'environment',
-				width: { ideal: 1920 },
-				height: { ideal: 1080 },
-				advanced: [{ focusMode: 'continuous' }]
-			},
+			{ facingMode: 'environment' },
 			{
 				fps: 25,
+				// html5-qrcode only accepts a single key in the first argument; extra constraints go here
+				videoConstraints: {
+					facingMode: 'environment',
+					width: { ideal: 1920 },
+					height: { ideal: 1080 },
+					advanced: [{ focusMode: 'continuous' }]
+				},
 				// Wide box suits 1D barcodes and scales with the viewfinder
 				qrbox: (width, height) => ({ width: Math.floor(width * 0.9), height: Math.floor(Math.min(height, width) * 0.5) }),
 				disableFlip: true
