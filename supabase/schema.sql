@@ -101,3 +101,4 @@ begin
 end;
 $$;
 12
+notify pgrst, 'reload schema';
