@@ -18,6 +18,16 @@ Open the app online at its HTTPS address (or `localhost`) at least once, sign in
 
 Offline mode does not support first-time sign-in, adding parts to the shared catalog, UPCitemdb lookups, or live updates from other users. Cached data and pending assignments are stored in that browser on that device; they are not a backup or shared until synchronization succeeds. Browser storage can be cleared by device or browser settings.
 
+## Importing the item reference list
+
+`python3 scripts/build_parts_list.py` converts `Item Reference List.csv.xlsx` into `master_parts_list.json` (needs `pandas` and `openpyxl`). Load it into the shared catalog with:
+
+```sh
+SUPABASE_URL=https://YOUR-PROJECT.supabase.co SUPABASE_SERVICE_ROLE_KEY=YOUR-SERVICE-ROLE-KEY python3 scripts/import_parts.py
+```
+
+Existing barcodes are skipped, so stock levels and manual edits are kept. The service role key bypasses RLS; use it only in your shell, never in `config.js`.
+
 ## Supabase setup
 
 1. Create a Supabase project.

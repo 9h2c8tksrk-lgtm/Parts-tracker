@@ -150,6 +150,22 @@ function findPartByBarcode(barcode) {
 	return parts.find(part => part.barcode === barcode);
 }
 
+async function fetchAllParts() {
+	const pageSize = 1000;
+	const rows = [];
+	for (let from = 0; ; from += pageSize) {
+		const { data, error } = await supabaseClient.from('parts')
+			.select('barcode, part_name, description, stock_level')
+			.order('barcode')
+			.range(from, from + pageSize - 1);
+		if (error) return { error };
+		rows.push(...data);
+		if (data.length < pageSize) break;
+	}
+	rows.sort((a, b) => a.part_name.localeCompare(b.part_name));
+	return { data: rows };
+}
+
 async function loadSharedData() {
 	if (!navigator.onLine) {
 		const hasSnapshot = await loadOfflineSnapshot(currentUser.id).catch(() => false);
@@ -170,7 +186,7 @@ async function loadSharedData() {
 		}
 		await saveOfflineSnapshot(currentUser.id).catch(() => {});
 		const [partsResult, assignmentsResult] = await Promise.all([
-			supabaseClient.from('parts').select('barcode, part_name, description, stock_level').order('part_name'),
+			fetchAllParts(),
 			supabaseClient.from('assigned_parts')
 				.select('id, created_at, wo_number, asset_number, barcode, part_name, description, stock_level, created_by, assigned_by')
 				.order('created_at', { ascending: false })
