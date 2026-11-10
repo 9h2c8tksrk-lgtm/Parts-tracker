@@ -304,7 +304,7 @@ function showUnknownBarcode(message) {
 async function lookupInternet(barcode, requestId) {
 	setStatus('Searching UPCitemdb for a matching product...');
 	try {
-		const { data, error } = await supabaseClient.functions.invoke('lookup-barcode', { body: { barcode } });
+		const { data, error } = await supabaseClient.functions.invoke('lookup-part-barcode', { body: { barcode } });
 		if (error) throw error;
 		if (requestId !== lookupRequest) return;
 
