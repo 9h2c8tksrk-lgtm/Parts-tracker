@@ -176,14 +176,17 @@ async function loadSharedData() {
 		]);
 
 		if (partsResult.error) throw partsResult.error;
-		if (assignmentsResult.error) throw assignmentsResult.error;
 
 		parts = partsResult.data;
-		assignments = assignmentsResult.data;
+		if (assignmentsResult.error) {
+			syncError ??= assignmentsResult.error;
+		} else {
+			assignments = assignmentsResult.data;
+		}
 		renderAssignments();
 		await saveOfflineSnapshot(currentUser.id).catch(() => {});
 		setStatus(syncError
-			? `Shared data loaded, but queued assignments could not sync: ${syncError.message}`
+			? `Parts loaded, but the assignment log or queued assignments failed: ${syncError.message}. If this mentions "quantity", run the quantity SQL in Supabase.`
 			: '');
 	} catch (error) {
 		const hasSnapshot = await loadOfflineSnapshot(currentUser.id).catch(() => false);
