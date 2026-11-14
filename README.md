@@ -3,7 +3,7 @@
 ## Features
 
 - Shared part catalog and assignment log, updated live for signed-in users.
-- Optional asset number recorded with each part assignment.
+- Start a pick with a WO number and optional asset number; each barcode scan adds 1 to that part's quantity, which can be adjusted before pressing Pick completed to save the assignments.
 - Email/password sign-up, sign-in, and sign-out.
 - Camera scanning or manual entry of UPC, EAN, and GTIN barcodes.
 - Authenticated barcode lookup through UPCitemdb. Results are suggestions that users review before adding.

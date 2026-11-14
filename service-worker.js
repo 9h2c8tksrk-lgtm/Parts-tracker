@@ -1,4 +1,4 @@
-const cacheName = 'parts-tracker-v1';
+const cacheName = 'parts-tracker-v2';
 const appShell = ['./', './index.html', './app.js', './config.js'];
 const cdnAssets = [
 	'https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css',

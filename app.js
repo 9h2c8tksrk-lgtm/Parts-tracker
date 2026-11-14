@@ -10,6 +10,7 @@ let scannerStarting = false;
 let realtimeChannel;
 let lookupRequest = 0;
 let offlineDatabase;
+const assignmentColumns = 'id, created_at, wo_number, asset_number, barcode, part_name, description, quantity, created_by, assigned_by';
 
 const byId = id => document.getElementById(id);
 
@@ -67,7 +68,6 @@ async function queueOfflineAssignment(assignment) {
 	await offlineStore('pending_assignments', 'readwrite', store => store.put(assignment));
 	assignments.unshift(assignment);
 	await saveOfflineSnapshot(currentUser.id);
-	byId('asset-number-input').value = '';
 	renderAssignments();
 	setStatus('Assignment saved on this device. It will sync when you are back online.');
 }
@@ -84,7 +84,7 @@ async function syncPendingAssignments() {
 			barcode: assignment.barcode,
 			part_name: assignment.part_name,
 			description: assignment.description,
-			stock_level: assignment.stock_level,
+			quantity: assignment.quantity,
 			created_by: assignment.created_by,
 			assigned_by: assignment.assigned_by
 		});
@@ -131,7 +131,7 @@ function renderAssignments() {
 		appendCell(row, assignment.barcode);
 		appendCell(row, assignment.part_name);
 		appendCell(row, assignment.description);
-		appendCell(row, assignment.stock_level);
+		appendCell(row, assignment.quantity ?? 1);
 		appendCell(row, assignment.assigned_by || assignment.created_by);
 		tbody.appendChild(row);
 	});
@@ -143,7 +143,6 @@ function renderPart(part) {
 	byId('part-desc').textContent = part?.description ?? '';
 	byId('part-stock').textContent = part ? String(part.stock_level) : '';
 	byId('new-part-form').classList.toggle('hidden', Boolean(part));
-	byId('assignment-form').classList.toggle('hidden', !part);
 }
 
 function findPartByBarcode(barcode) {
@@ -172,7 +171,7 @@ async function loadSharedData() {
 		const [partsResult, assignmentsResult] = await Promise.all([
 			supabaseClient.from('parts').select('barcode, part_name, description, stock_level').order('part_name'),
 			supabaseClient.from('assigned_parts')
-				.select('id, created_at, wo_number, asset_number, barcode, part_name, description, stock_level, created_by, assigned_by')
+				.select(assignmentColumns)
 				.order('created_at', { ascending: false })
 				.limit(1000)
 		]);
@@ -213,10 +212,8 @@ function displayAuth(session) {
 		byId('logs-table-body').replaceChildren();
 		byId('barcode-value').textContent = '';
 		byId('barcode-input').value = '';
-		byId('wo-input').value = '';
-		byId('asset-number-input').value = '';
+		endPick();
 		byId('new-part-form').classList.add('hidden');
-		byId('assignment-form').classList.add('hidden');
 		if (html5QrCode?.isScanning) {
 			html5QrCode.stop().catch(error => setStatus(`Could not stop the camera: ${error.message}`, true));
 		}
@@ -271,7 +268,7 @@ function exportAssignmentsToCSV() {
 		setStatus('There are no assignments to export.');
 		return;
 	}
-	const headers = ['Timestamp', 'WO Number', 'Asset Number', 'Barcode', 'Part Name', 'Description', 'Stock Level', 'Assigned By'];
+	const headers = ['Timestamp', 'WO Number', 'Asset Number', 'Barcode', 'Part Name', 'Description', 'Quantity', 'Assigned By'];
 	const rows = assignments.map(assignment => [
 		assignment.created_at,
 		assignment.wo_number,
@@ -279,7 +276,7 @@ function exportAssignmentsToCSV() {
 		assignment.barcode,
 		assignment.part_name,
 		assignment.description,
-		assignment.stock_level,
+		assignment.quantity ?? 1,
 		assignment.assigned_by || assignment.created_by
 	]);
 	const csv = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
@@ -336,11 +333,10 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 		byId('part-desc').textContent = '';
 		byId('part-stock').textContent = '';
 		byId('new-part-form').classList.add('hidden');
-		byId('assignment-form').classList.add('hidden');
 		setStatus(`Enter a barcode of 1 to ${maximumBarcodeLength} characters.`, true);
 		return;
 	}
-	if (!forceLookup && barcode === byId('barcode-value').textContent) return;
+	if (!forceLookup && !activePick && barcode === byId('barcode-value').textContent) return;
 
 	lookupRequest += 1;
 	const requestId = lookupRequest;
@@ -349,7 +345,11 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 	const existingPart = findPartByBarcode(barcode);
 	if (existingPart) {
 		renderPart(existingPart);
-		setStatus('Part found in the shared list.');
+		if (activePick) {
+			addToPick(existingPart, !forceLookup);
+			return;
+		}
+		setStatus('Part found in the shared list. Start a pick to assign parts to a work order.');
 		return;
 	}
 
@@ -357,7 +357,6 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 	byId('part-desc').textContent = '';
 	byId('part-stock').textContent = '';
 	byId('new-part-form').classList.add('hidden');
-	byId('assignment-form').classList.add('hidden');
 
 	if (!/^\d{8,14}$/.test(barcode)) {
 		showUnknownBarcode('This barcode is not a UPC/EAN/GTIN format supported by the public lookup. Enter the part details manually.');
@@ -406,42 +405,112 @@ async function addPart(event) {
 	renderPart(data);
 	await saveOfflineSnapshot(currentUser.id).catch(() => {});
 	setStatus('Part added to the shared parts list.');
+	addToPick(data, false);
 }
 
-async function assignPart(event) {
-	event.preventDefault();
-	if (!currentUser || !selectedPart) return;
+let activePick = null;
+let lastPickScan = { barcode: '', time: 0 };
+const duplicateScanWindowMs = 2000;
 
+function renderPick() {
+	byId('pick-form').classList.toggle('hidden', Boolean(activePick));
+	byId('pick-active').classList.toggle('hidden', !activePick);
+	byId('active-wo').textContent = activePick?.woNumber ?? '';
+	byId('active-asset').textContent = activePick?.assetNumber ?? '';
+	byId('active-asset-wrap').classList.toggle('hidden', !activePick?.assetNumber);
+
+	const tbody = byId('pick-items-body');
+	tbody.replaceChildren();
+	const items = activePick ? [...activePick.items.values()] : [];
+	byId('pick-empty').classList.toggle('hidden', items.length > 0);
+	items.forEach(item => {
+		const row = document.createElement('tr');
+		appendCell(row, item.part.barcode);
+		appendCell(row, item.part.part_name);
+
+		const qtyCell = document.createElement('td');
+		qtyCell.className = 'border px-2 py-1';
+		const input = document.createElement('input');
+		input.type = 'number';
+		input.min = '1';
+		input.step = '1';
+		input.value = String(item.qty);
+		input.className = 'w-20 border rounded px-2 py-1';
+		input.setAttribute('aria-label', `Quantity for ${item.part.part_name}`);
+		input.addEventListener('change', () => {
+			const qty = Math.floor(Number(input.value));
+			item.qty = Number.isFinite(qty) && qty >= 1 ? qty : item.qty;
+			input.value = String(item.qty);
+		});
+		qtyCell.appendChild(input);
+		row.appendChild(qtyCell);
+
+		const removeCell = document.createElement('td');
+		removeCell.className = 'border px-2 py-1';
+		const removeBtn = document.createElement('button');
+		removeBtn.type = 'button';
+		removeBtn.textContent = 'Remove';
+		removeBtn.className = 'text-red-700 underline';
+		removeBtn.addEventListener('click', () => {
+			activePick.items.delete(item.part.barcode);
+			renderPick();
+		});
+		removeCell.appendChild(removeBtn);
+		row.appendChild(removeCell);
+		tbody.appendChild(row);
+	});
+}
+
+function startPick(event) {
+	event.preventDefault();
 	const woNumber = byId('wo-input').value.trim();
 	if (!woNumber) {
-		setStatus('Enter a work order number before assigning the part.', true);
+		setStatus('Enter a work order number to start a pick.', true);
 		return;
 	}
-	const newAssignment = {
-		id: crypto.randomUUID(),
-		created_at: new Date().toISOString(),
-		wo_number: woNumber,
-		asset_number: byId('asset-number-input').value.trim(),
-		barcode: selectedPart.barcode,
-		part_name: selectedPart.part_name,
-		description: selectedPart.description,
-		stock_level: selectedPart.stock_level,
-		created_by: currentUser.id,
-		assigned_by: currentUser.email
-	};
+	activePick = { woNumber, assetNumber: byId('asset-number-input').value.trim(), items: new Map() };
+	lastPickScan = { barcode: '', time: 0 };
+	renderPick();
+	setStatus('Pick started. Each scan adds one to that part’s quantity; adjust quantities before completing.');
+}
+
+function endPick() {
+	activePick = null;
+	byId('wo-input').value = '';
+	byId('asset-number-input').value = '';
+	renderPick();
+}
+
+function addToPick(part, isCameraScan) {
+	if (!activePick) return;
+	const now = Date.now();
+	// The camera decodes the same code many times a second; treat a quick repeat as one scan
+	if (isCameraScan && lastPickScan.barcode === part.barcode && now - lastPickScan.time < duplicateScanWindowMs) {
+		lastPickScan.time = now;
+		return;
+	}
+	lastPickScan = { barcode: part.barcode, time: now };
+	const item = activePick.items.get(part.barcode);
+	if (item) item.qty += 1;
+	else activePick.items.set(part.barcode, { part, qty: 1 });
+	renderPick();
+	setStatus(`${part.part_name}: quantity ${activePick.items.get(part.barcode).qty}.`);
+}
+
+async function saveAssignment(newAssignment) {
 	if (!navigator.onLine) {
 		await queueOfflineAssignment(newAssignment);
-		return;
+		return true;
 	}
 	let result;
 	try {
 		result = await supabaseClient.from('assigned_parts').insert(newAssignment)
-			.select('id, created_at, wo_number, asset_number, barcode, part_name, description, stock_level, created_by, assigned_by')
+			.select(assignmentColumns)
 			.single();
 	} catch (error) {
 		if (error instanceof TypeError || !navigator.onLine) {
 			await queueOfflineAssignment(newAssignment);
-			return;
+			return true;
 		}
 		throw error;
 	}
@@ -449,19 +518,54 @@ async function assignPart(event) {
 	if (error) {
 		if (!navigator.onLine || isNetworkFailure(error)) {
 			await queueOfflineAssignment(newAssignment);
-			return;
+			return true;
 		}
 		setStatus(`Could not save the assignment: ${error.message}`, true);
+		return false;
+	}
+	if (!assignments.some(assignment => assignment.id === data.id)) assignments.push(data);
+	return true;
+}
+
+async function completePick() {
+	if (!currentUser || !activePick) return;
+	const { woNumber, assetNumber, items } = activePick;
+	if (!items.size) {
+		endPick();
+		setStatus('Pick ended with no parts assigned.');
 		return;
 	}
-
-	if (!assignments.some(assignment => assignment.id === data.id)) assignments.push(data);
-	byId('asset-number-input').value = '';
-	assignments.sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
-	assignments = assignments.slice(0, 1000);
-	renderAssignments();
-	await saveOfflineSnapshot(currentUser.id).catch(() => {});
-	setStatus('Part assignment saved for all users.');
+	byId('pick-complete-btn').disabled = true;
+	try {
+		const createdAt = new Date().toISOString();
+		for (const item of [...items.values()]) {
+			const saved = await saveAssignment({
+				id: crypto.randomUUID(),
+				created_at: createdAt,
+				wo_number: woNumber,
+				asset_number: assetNumber,
+				barcode: item.part.barcode,
+				part_name: item.part.part_name,
+				description: item.part.description,
+				quantity: item.qty,
+				created_by: currentUser.id,
+				assigned_by: currentUser.email
+			});
+			if (!saved) {
+				renderPick();
+				return;
+			}
+			items.delete(item.part.barcode);
+		}
+		assignments.sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
+		assignments = assignments.slice(0, 1000);
+		renderAssignments();
+		await saveOfflineSnapshot(currentUser.id).catch(() => {});
+		endPick();
+		setStatus(`Pick completed for WO ${woNumber}. Assignments saved.`);
+	} finally {
+		byId('pick-complete-btn').disabled = false;
+	}
 }
 
 async function authenticate(mode) {
@@ -572,8 +676,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 	byId('new-part-form').addEventListener('submit', event => {
 		addPart(event).catch(error => setStatus(error.message, true));
 	});
-	byId('assignment-form').addEventListener('submit', event => {
-		assignPart(event).catch(error => setStatus(error.message, true));
+	byId('pick-form').addEventListener('submit', startPick);
+	byId('pick-complete-btn').addEventListener('click', () => {
+		completePick().catch(error => setStatus(error.message, true));
 	});
 	byId('export-btn').addEventListener('click', exportAssignmentsToCSV);
 

@@ -38,6 +38,38 @@
 			<p id="connection-status" class="bg-yellow-100 border border-yellow-400 rounded p-3 mb-4" role="status"></p>
 			<p id="app-status" class="hidden bg-blue-100 border border-blue-300 rounded p-3 mb-4" role="status"></p>
 
+			<section class="bg-white rounded shadow p-4 mb-4">
+				<form id="pick-form" class="grid md:grid-cols-3 gap-2 items-end">
+					<div>
+						<label class="block font-semibold mb-1" for="wo-input">Work order number</label>
+						<input id="wo-input" type="text" maxlength="200" required class="w-full border rounded px-2 py-2" placeholder="Enter WO number">
+					</div>
+					<div>
+						<label class="block font-semibold mb-1" for="asset-number-input">Asset number (optional)</label>
+						<input id="asset-number-input" type="text" maxlength="200" class="w-full border rounded px-2 py-2" placeholder="Enter asset number">
+					</div>
+					<button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Start pick</button>
+				</form>
+				<div id="pick-active" class="hidden">
+					<div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+						<p>Picking for WO <span id="active-wo" class="font-semibold"></span><span id="active-asset-wrap" class="hidden"> / Asset <span id="active-asset" class="font-semibold"></span></span>. Each scan adds 1 to the part’s quantity.</p>
+						<button id="pick-complete-btn" type="button" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50">Pick completed</button>
+					</div>
+					<p id="pick-empty" class="text-sm text-gray-600">No parts scanned yet.</p>
+					<table class="min-w-full text-sm">
+						<thead>
+							<tr class="bg-gray-200">
+								<th class="text-left px-2 py-1">Barcode</th>
+								<th class="text-left px-2 py-1">Part Name</th>
+								<th class="text-left px-2 py-1">Quantity</th>
+								<th class="text-left px-2 py-1"></th>
+							</tr>
+						</thead>
+						<tbody id="pick-items-body"></tbody>
+					</table>
+				</div>
+			</section>
+
 			<div class="grid md:grid-cols-2 gap-4 mb-4">
 				<section class="bg-white rounded shadow p-4">
 					<h2 class="font-semibold mb-2">Scan or enter a barcode</h2>
@@ -67,13 +99,6 @@
 						<input id="new-part-stock" type="number" min="0" step="1" value="0" required class="w-full border rounded px-2 py-2 mb-3">
 						<button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add to shared parts</button>
 					</form>
-					<form id="assignment-form" class="border-t pt-3">
-						<label class="block font-semibold mb-1" for="wo-input">Work order number</label>
-						<input id="wo-input" type="text" maxlength="200" required class="w-full border rounded px-2 py-2 mb-2" placeholder="Enter WO number">
-						<label class="block font-semibold mb-1" for="asset-number-input">Asset number (optional)</label>
-						<input id="asset-number-input" type="text" maxlength="200" class="w-full border rounded px-2 py-2 mb-2" placeholder="Enter asset number">
-						<button id="assign-btn" type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Assign part to WO</button>
-					</form>
 				</section>
 			</div>
 
@@ -92,7 +117,7 @@
 							<th class="text-left px-2 py-1">Barcode</th>
 							<th class="text-left px-2 py-1">Part Name</th>
 							<th class="text-left px-2 py-1">Description</th>
-							<th class="text-left px-2 py-1">Stock Level</th>
+							<th class="text-left px-2 py-1">Quantity</th>
 							<th class="text-left px-2 py-1">Assigned By</th>
 						</tr>
 					</thead>

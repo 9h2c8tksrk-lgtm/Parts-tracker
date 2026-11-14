@@ -22,6 +22,12 @@ create table if not exists public.assigned_parts (
 alter table public.assigned_parts
 	add column if not exists asset_number text not null default '' check (length(asset_number) <= 200);
 
+alter table public.assigned_parts
+	add column if not exists quantity integer not null default 1 check (quantity > 0);
+
+alter table public.assigned_parts
+	alter column stock_level drop not null;
+
 create or replace function public.set_assignment_email()
 returns trigger
 language plpgsql
