@@ -178,6 +178,7 @@ async function loadSharedData() {
 		if (partsResult.error) throw partsResult.error;
 
 		parts = partsResult.data;
+		byId('parts-count').textContent = `Parts available to look up: ${parts.length}`;
 		if (assignmentsResult.error) {
 			syncError ??= assignmentsResult.error;
 		} else {
@@ -209,6 +210,7 @@ function displayAuth(session) {
 			realtimeChannel = undefined;
 		}
 		parts = [];
+		byId('parts-count').textContent = '';
 		assignments = [];
 		renderPart(null);
 		byId('logs-table-body').replaceChildren();
