@@ -345,7 +345,7 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 			addToPick(existingPart, !forceLookup);
 			return;
 		}
-		setStatus('Part found in the shared list. Start a pick to assign parts to a work order.');
+		setStatus(`Found: ${existingPart.part_name} — ${existingPart.description || 'no description'}. Start a pick to assign parts to a work order.`);
 		return;
 	}
 
@@ -488,7 +488,7 @@ function addToPick(part, isCameraScan) {
 	if (item) item.qty += 1;
 	else activePick.items.set(part.barcode, { part, qty: 1 });
 	renderPick();
-	setStatus(`${part.part_name}: quantity ${activePick.items.get(part.barcode).qty}.`);
+	setStatus(`Found: ${part.part_name} — ${part.description || 'no description'}. Quantity ${activePick.items.get(part.barcode).qty}.`);
 }
 
 async function saveAssignment(newAssignment) {
