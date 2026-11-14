@@ -10,5 +10,53 @@
     "PartName": "MABCABF147",
     "Description": "HOSE BARB STR 1/2 HOSE X 1/4 NPT.",
     "StockLevel": 17
+  },
+  {
+    "Barcode": "LF14000NN",
+    "PartName": "Lube oil filter",
+    "Description": "Fleetguard LF14000NN (Cummins 4367100). Cummins X15 / ISX15 engine oil filter.",
+    "StockLevel": 0
+  },
+  {
+    "Barcode": "FS19764",
+    "PartName": "Fuel/water separator (stage 1)",
+    "Description": "Fleetguard FS19764 (Cummins 102527). Cummins X15 stage 1 fuel/water separator.",
+    "StockLevel": 0
+  },
+  {
+    "Barcode": "FS19564",
+    "PartName": "Fuel/water separator",
+    "Description": "Fleetguard FS19564.",
+    "StockLevel": 0
+  },
+  {
+    "Barcode": "FF5825NN",
+    "PartName": "Fuel filter (stage 2)",
+    "Description": "Fleetguard FF5825NN (Cummins 5365988). Cummins X15 NanoNet stage 2 fuel filter.",
+    "StockLevel": 0
+  },
+  {
+    "Barcode": "FF5971N",
+    "PartName": "Fuel filter (stage 2, 2020+)",
+    "Description": "Fleetguard FF5971N (Cummins 5575143). Cummins X15 stage 2 fuel filter, 2020-and-later version.",
+    "StockLevel": 0
+  },
+  {
+    "Barcode": "UF106",
+    "PartName": "DEF filter",
+    "Description": "Fleetguard UF106 (Cummins 4388378). Cummins X15 DEF filter.",
+    "StockLevel": 0
+  },
+  {
+    "Barcode": "WF2127",
+    "PartName": "Coolant filter",
+    "Description": "Fleetguard WF2127. Cummins X15 coolant filter.",
+    "StockLevel": 0
+  },
+  {
+    "Barcode": "742330128640",
+    "PartName": "Air filter P544950",
+    "Description": "Donaldson P544950 primary RadialSeal air filter. Listed for Kenworth C509 Cummins.",
+    "StockLevel": 0
   }
 ]
