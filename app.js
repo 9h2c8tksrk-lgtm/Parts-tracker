@@ -314,7 +314,8 @@ async function lookupInternet(barcode, requestId) {
 			.join(' — ')
 			.slice(0, 2000);
 		renderPart(null);
-		setStatus('A possible match was found. Review the details before adding it.');
+		setStatus(`Possible match: ${data.partName}${data.brand ? ` (${data.brand})` : ''}. Review the details in the form below, then press "Add to shared parts".`);
+		byId('new-part-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
 	} catch (error) {
 		if (requestId !== lookupRequest) return;
 		showUnknownBarcode(`${error.message} Enter the part details manually to add it.`);
