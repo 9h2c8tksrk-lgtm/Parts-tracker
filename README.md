@@ -6,7 +6,7 @@
 - Start a pick with a WO number and optional asset number; each barcode scan adds 1 to that part's quantity, which can be adjusted before pressing Pick completed to save the assignments.
 - Email/password sign-up, sign-in, and sign-out.
 - Camera scanning or manual entry of UPC, EAN, and GTIN barcodes.
-- Authenticated barcode lookup through UPCitemdb. Results are suggestions that users review before adding.
+- Barcode lookup uses only your Supabase parts list; unknown barcodes can be added manually.
 - CSV export of the shared assignment log.
 - Offline access to the previously loaded catalog and assignment log, with queued assignment sync.
 

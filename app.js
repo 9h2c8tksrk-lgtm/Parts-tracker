@@ -301,32 +301,6 @@ function showUnknownBarcode(message) {
 	setStatus(message);
 }
 
-async function lookupInternet(barcode, requestId) {
-	setStatus('Searching UPCitemdb for a matching product...');
-	try {
-		const { data, error } = await supabaseClient.functions.invoke('lookup-part-barcode', { body: { barcode } });
-		if (error) throw error;
-		if (requestId !== lookupRequest) return;
-
-		if (!data?.found) {
-			showUnknownBarcode('No public match was found. Enter the part details to add it to the shared list.');
-			return;
-		}
-
-		byId('new-part-name').value = data.partName;
-		byId('new-part-desc').value = [data.brand, data.description]
-			.filter(Boolean)
-			.join(' — ')
-			.slice(0, 2000);
-		renderPart(null);
-		setStatus(`Possible match: ${data.partName}${data.brand ? ` (${data.brand})` : ''}. Review the details in the form below, then press "Add to shared parts".`);
-		byId('new-part-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
-	} catch (error) {
-		if (requestId !== lookupRequest) return;
-		showUnknownBarcode(`${error.message} Enter the part details manually to add it.`);
-	}
-}
-
 async function selectBarcode(rawBarcode, forceLookup = false) {
 	const barcode = rawBarcode.trim();
 	if (!barcode || barcode.length > maximumBarcodeLength) {
@@ -341,7 +315,6 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 	if (!forceLookup && !activePick && barcode === byId('barcode-value').textContent) return;
 
 	lookupRequest += 1;
-	const requestId = lookupRequest;
 	byId('barcode-value').textContent = barcode;
 	byId('barcode-input').value = barcode;
 	const existingPart = findPartByBarcode(barcode);
@@ -359,15 +332,7 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 	byId('part-desc').textContent = '';
 	byId('new-part-form').classList.add('hidden');
 
-	if (!/^\d{8,14}$/.test(barcode)) {
-		showUnknownBarcode('This barcode is not a UPC/EAN/GTIN format supported by the public lookup. Enter the part details manually.');
-		return;
-	}
-	if (!navigator.onLine) {
-		showUnknownBarcode('This part is not in the saved catalog. Internet lookup and adding new parts require a connection.');
-		return;
-	}
-	await lookupInternet(barcode, requestId);
+	showUnknownBarcode('Not found in your parts list. Enter the part details to add it.');
 }
 
 async function addPart(event) {
