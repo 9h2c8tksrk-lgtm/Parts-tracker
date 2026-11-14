@@ -141,7 +141,6 @@ function renderPart(part) {
 	selectedPart = part;
 	byId('part-name').textContent = part?.part_name ?? '';
 	byId('part-desc').textContent = part?.description ?? '';
-	byId('part-stock').textContent = part ? String(part.stock_level) : '';
 	byId('new-part-form').classList.toggle('hidden', Boolean(part));
 }
 
@@ -169,7 +168,7 @@ async function loadSharedData() {
 		}
 		await saveOfflineSnapshot(currentUser.id).catch(() => {});
 		const [partsResult, assignmentsResult] = await Promise.all([
-			supabaseClient.from('parts').select('barcode, part_name, description, stock_level').order('part_name'),
+			supabaseClient.from('parts').select('barcode, part_name, description').order('part_name'),
 			supabaseClient.from('assigned_parts')
 				.select(assignmentColumns)
 				.order('created_at', { ascending: false })
@@ -294,7 +293,6 @@ function showUnknownBarcode(message) {
 	renderPart(null);
 	byId('new-part-name').value = '';
 	byId('new-part-desc').value = '';
-	byId('new-part-stock').value = '0';
 	setStatus(message);
 }
 
@@ -315,9 +313,8 @@ async function lookupInternet(barcode, requestId) {
 			.filter(Boolean)
 			.join(' — ')
 			.slice(0, 2000);
-		byId('new-part-stock').value = '0';
 		renderPart(null);
-		setStatus('A possible match was found. Review the details and stock level before adding it.');
+		setStatus('A possible match was found. Review the details before adding it.');
 	} catch (error) {
 		if (requestId !== lookupRequest) return;
 		showUnknownBarcode(`${error.message} Enter the part details manually to add it.`);
@@ -331,7 +328,6 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 		byId('barcode-value').textContent = '';
 		byId('part-name').textContent = '';
 		byId('part-desc').textContent = '';
-		byId('part-stock').textContent = '';
 		byId('new-part-form').classList.add('hidden');
 		setStatus(`Enter a barcode of 1 to ${maximumBarcodeLength} characters.`, true);
 		return;
@@ -355,7 +351,6 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 
 	byId('part-name').textContent = '';
 	byId('part-desc').textContent = '';
-	byId('part-stock').textContent = '';
 	byId('new-part-form').classList.add('hidden');
 
 	if (!/^\d{8,14}$/.test(barcode)) {
@@ -381,16 +376,15 @@ async function addPart(event) {
 	const part = {
 		barcode,
 		part_name: byId('new-part-name').value.trim(),
-		description: byId('new-part-desc').value.trim(),
-		stock_level: Number(byId('new-part-stock').value)
+		description: byId('new-part-desc').value.trim()
 	};
-	if (!part.part_name || !Number.isInteger(part.stock_level) || part.stock_level < 0) {
-		setStatus('Enter a part name and a whole-number stock level of zero or more.', true);
+	if (!part.part_name) {
+		setStatus('Enter a part name.', true);
 		return;
 	}
 
 	const { data, error } = await supabaseClient.from('parts').insert(part)
-		.select('barcode, part_name, description, stock_level')
+		.select('barcode, part_name, description')
 		.single();
 	if (error) {
 		setStatus(!navigator.onLine

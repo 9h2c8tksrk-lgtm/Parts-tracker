@@ -87,16 +87,13 @@
 					<dl class="space-y-1 mb-4">
 						<div><dt class="inline font-semibold">Part name: </dt><dd id="part-name" class="inline"></dd></div>
 						<div><dt class="inline font-semibold">Description: </dt><dd id="part-desc" class="inline"></dd></div>
-						<div><dt class="inline font-semibold">Stock level: </dt><dd id="part-stock" class="inline"></dd></div>
 					</dl>
 					<form id="new-part-form" class="hidden border-t pt-3">
 						<h3 class="font-semibold mb-2">Add this barcode to the shared parts list</h3>
 						<label class="block text-sm font-semibold mb-1" for="new-part-name">Part name</label>
 						<input id="new-part-name" type="text" required maxlength="200" class="w-full border rounded px-2 py-2 mb-2">
 						<label class="block text-sm font-semibold mb-1" for="new-part-desc">Description</label>
-						<textarea id="new-part-desc" maxlength="2000" rows="2" class="w-full border rounded px-2 py-2 mb-2"></textarea>
-						<label class="block text-sm font-semibold mb-1" for="new-part-stock">Stock level</label>
-						<input id="new-part-stock" type="number" min="0" step="1" value="0" required class="w-full border rounded px-2 py-2 mb-3">
+						<textarea id="new-part-desc" maxlength="2000" rows="2" class="w-full border rounded px-2 py-2 mb-3"></textarea>
 						<button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Add to shared parts</button>
 					</form>
 				</section>
