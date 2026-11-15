@@ -10,6 +10,8 @@ let scannerStarting = false;
 let realtimeChannel;
 let lookupRequest = 0;
 let offlineDatabase;
+let stockCounts = [];
+const countColumns = 'id, created_at, count_name, barcode, part_name, description, counted_qty, created_by, counted_by';
 const assignmentColumns = 'id, created_at, wo_number, asset_number, barcode, part_name, description, quantity, created_by, assigned_by';
 
 const byId = id => document.getElementById(id);
@@ -18,11 +20,12 @@ function openOfflineDatabase() {
 	if (!('indexedDB' in window)) return Promise.reject(new Error('Offline storage is not supported by this browser.'));
 	if (offlineDatabase) return offlineDatabase;
 	offlineDatabase = new Promise((resolve, reject) => {
-		const request = indexedDB.open('parts-tracker-offline', 2);
+		const request = indexedDB.open('parts-tracker-offline', 3);
 		request.onupgradeneeded = () => {
 			const database = request.result;
 			if (!database.objectStoreNames.contains('snapshots')) database.createObjectStore('snapshots', { keyPath: 'userId' });
 			if (!database.objectStoreNames.contains('pending_assignments')) database.createObjectStore('pending_assignments', { keyPath: 'id' });
+			if (!database.objectStoreNames.contains('pending_counts')) database.createObjectStore('pending_counts', { keyPath: 'id' });
 			if (!database.objectStoreNames.contains('pending_parts')) database.createObjectStore('pending_parts', { keyPath: 'barcode' });
 		};
 		request.onsuccess = () => resolve(request.result);
@@ -341,6 +344,7 @@ async function loadSharedData() {
 			assignments = assignmentsResult.data;
 		}
 		renderAssignments();
+		loadStockCounts().catch(() => {});
 		await saveOfflineSnapshot(currentUser.id).catch(() => {});
 		setStatus(syncError
 			? `Parts loaded, but the assignment log or queued assignments failed: ${syncError.message}. If this mentions "quantity", run the quantity SQL in Supabase.`
@@ -375,6 +379,9 @@ function displayAuth(session) {
 		byId('barcode-value').textContent = '';
 		byId('barcode-input').value = '';
 		endPick();
+		endCount();
+		stockCounts = [];
+		byId('counts-table-body').replaceChildren();
 		byId('new-part-form').classList.add('hidden');
 		if (html5QrCode?.isScanning) {
 			html5QrCode.stop().catch(error => setStatus(`Could not stop the camera: ${error.message}`, true));
@@ -470,7 +477,7 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 		setStatus(`Enter a barcode of 1 to ${maximumBarcodeLength} characters.`, true);
 		return;
 	}
-	if (!forceLookup && !activePick && barcode === byId('barcode-value').textContent) return;
+	if (!forceLookup && !activePick && !activeCount && barcode === byId('barcode-value').textContent) return;
 
 	lookupRequest += 1;
 	byId('barcode-value').textContent = barcode;
@@ -478,11 +485,11 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 	const existingPart = findPartByBarcode(barcode);
 	if (existingPart) {
 		renderPart(existingPart);
-		if (activePick) {
-			addToPick(existingPart, !forceLookup);
+		if (activePick || activeCount) {
+			addScanned(existingPart, !forceLookup);
 			return;
 		}
-		setStatus(`Found: ${existingPart.part_name} — ${existingPart.description || 'no description'}. Start a pick to assign parts to a work order.`);
+		setStatus(`Found: ${existingPart.part_name} — ${existingPart.description || 'no description'}. Start a pick or stock take to record it.`);
 		return;
 	}
 
@@ -513,7 +520,7 @@ async function addPart(event) {
 		const queued = await queueOfflinePart(part);
 		renderPart(queued);
 		setStatus('Part saved on this device. It will be added to the shared list when you are back online.');
-		addToPick(queued, false);
+		addScanned(queued, false);
 	};
 	if (!navigator.onLine) {
 		await saveOffline();
@@ -548,10 +555,11 @@ async function addPart(event) {
 	renderPart(data);
 	await saveOfflineSnapshot(currentUser.id).catch(() => {});
 	setStatus('Part added to the shared parts list.');
-	addToPick(data, false);
+	addScanned(data, false);
 }
 
 let activePick = null;
+let activeCount = null;
 let lastPickScan = { barcode: '', time: 0 };
 const duplicateScanWindowMs = 2000;
 
@@ -606,6 +614,10 @@ function renderPick() {
 
 function startPick(event) {
 	event.preventDefault();
+	if (activeCount) {
+		setStatus('Finish the stock take before starting a pick.', true);
+		return;
+	}
 	const woNumber = byId('wo-input').value.trim();
 	if (!woNumber) {
 		setStatus('Enter a work order number to start a pick.', true);
@@ -853,6 +865,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 		completePick().catch(error => setStatus(error.message, true));
 	});
 	byId('export-btn').addEventListener('click', exportAssignmentsToCSV);
+	byId('count-form').addEventListener('submit', startCount);
+	byId('count-complete-btn').addEventListener('click', () => {
+		finishCount().catch(error => setStatus(error.message, true));
+	});
+	byId('export-counts-btn').addEventListener('click', exportCountsToCSV);
 
 	supabaseClient.auth.onAuthStateChange((_event, session) => {
 		setTimeout(() => displayAuth(session), 0);
@@ -864,3 +881,207 @@ document.addEventListener('DOMContentLoaded', async () => {
 	}
 	displayAuth(data.session);
 });
+
+// ---- Stock take ----
+function addScanned(part, isCameraScan) {
+	if (activePick) addToPick(part, isCameraScan);
+	else if (activeCount) addToCount(part, isCameraScan);
+}
+
+function renderCount() {
+	byId('count-form').classList.toggle('hidden', Boolean(activeCount));
+	byId('count-active').classList.toggle('hidden', !activeCount);
+	byId('active-count-name').textContent = activeCount?.name ?? '';
+	const tbody = byId('count-items-body');
+	tbody.replaceChildren();
+	const items = activeCount ? [...activeCount.items.values()] : [];
+	byId('count-empty').classList.toggle('hidden', items.length > 0);
+	items.forEach(item => {
+		const row = document.createElement('tr');
+		appendCell(row, item.part.barcode);
+		appendCell(row, item.part.part_name);
+		const qtyCell = document.createElement('td');
+		qtyCell.className = 'border px-2 py-1';
+		const input = document.createElement('input');
+		input.type = 'number';
+		input.min = '0';
+		input.step = '1';
+		input.value = String(item.qty);
+		input.className = 'w-20 border rounded px-2 py-1';
+		input.setAttribute('aria-label', `Counted quantity for ${item.part.part_name}`);
+		input.addEventListener('change', () => {
+			const qty = Math.floor(Number(input.value));
+			item.qty = Number.isFinite(qty) && qty >= 0 ? qty : item.qty;
+			input.value = String(item.qty);
+		});
+		qtyCell.appendChild(input);
+		row.appendChild(qtyCell);
+		const removeCell = document.createElement('td');
+		removeCell.className = 'border px-2 py-1';
+		const removeBtn = document.createElement('button');
+		removeBtn.type = 'button';
+		removeBtn.textContent = 'Remove';
+		removeBtn.className = 'text-red-700 underline';
+		removeBtn.addEventListener('click', () => {
+			activeCount.items.delete(item.part.barcode);
+			renderCount();
+		});
+		removeCell.appendChild(removeBtn);
+		row.appendChild(removeCell);
+		tbody.appendChild(row);
+	});
+}
+
+function startCount(event) {
+	event.preventDefault();
+	if (activePick) {
+		setStatus('Complete the pick before starting a stock take.', true);
+		return;
+	}
+	const name = byId('count-name-input').value.trim();
+	if (!name) {
+		setStatus('Enter a stock take name or location.', true);
+		return;
+	}
+	activeCount = { name, items: new Map() };
+	lastPickScan = { barcode: '', time: 0 };
+	renderCount();
+	setStatus('Stock take started. Each scan adds 1 to the counted quantity; adjust counts before finishing.');
+}
+
+function endCount() {
+	activeCount = null;
+	byId('count-name-input').value = '';
+	renderCount();
+}
+
+function addToCount(part, isCameraScan) {
+	const now = Date.now();
+	if (isCameraScan && lastPickScan.barcode === part.barcode && now - lastPickScan.time < duplicateScanWindowMs) {
+		lastPickScan.time = now;
+		return;
+	}
+	lastPickScan = { barcode: part.barcode, time: now };
+	const item = activeCount.items.get(part.barcode);
+	if (item) item.qty += 1;
+	else activeCount.items.set(part.barcode, { part, qty: 1 });
+	renderCount();
+	setStatus(`Counted: ${part.part_name} — ${activeCount.items.get(part.barcode).qty}.`);
+}
+
+function renderStockCounts() {
+	const tbody = byId('counts-table-body');
+	tbody.replaceChildren();
+	stockCounts.forEach(count => {
+		const row = document.createElement('tr');
+		appendCell(row, new Date(count.created_at).toLocaleString());
+		appendCell(row, count.count_name);
+		appendCell(row, count.pending_offline ? 'Pending sync' : 'Synced');
+		appendCell(row, count.barcode);
+		appendCell(row, count.part_name);
+		appendCell(row, count.counted_qty);
+		appendCell(row, count.counted_by || count.created_by);
+		tbody.appendChild(row);
+	});
+}
+
+async function saveCount(record) {
+	const queue = async () => {
+		record.pending_offline = true;
+		await offlineStore('pending_counts', 'readwrite', store => store.put(record));
+		stockCounts.unshift(record);
+		return true;
+	};
+	if (!navigator.onLine) return queue();
+	let result;
+	try {
+		result = await supabaseClient.from('stock_counts').insert(record).select(countColumns).single();
+	} catch (error) {
+		if (isNetworkFailure(error)) return queue();
+		throw error;
+	}
+	if (result.error) {
+		if (!navigator.onLine || isNetworkFailure(result.error)) return queue();
+		setStatus(`Could not save the stock count: ${result.error.message}. Make sure the stock count SQL has been run in Supabase.`, true);
+		return false;
+	}
+	stockCounts.unshift(result.data);
+	return true;
+}
+
+async function finishCount() {
+	if (!currentUser || !activeCount) return;
+	const { name, items } = activeCount;
+	if (!items.size) {
+		endCount();
+		setStatus('Stock take ended with no parts counted.');
+		return;
+	}
+	byId('count-complete-btn').disabled = true;
+	try {
+		const createdAt = new Date().toISOString();
+		for (const item of [...items.values()]) {
+			const saved = await saveCount({
+				id: crypto.randomUUID(),
+				created_at: createdAt,
+				count_name: name,
+				barcode: item.part.barcode,
+				part_name: item.part.part_name,
+				description: item.part.description,
+				counted_qty: item.qty,
+				created_by: currentUser.id,
+				counted_by: currentUser.email
+			});
+			if (!saved) {
+				renderCount();
+				renderStockCounts();
+				return;
+			}
+			items.delete(item.part.barcode);
+		}
+		renderStockCounts();
+		endCount();
+		setStatus(navigator.onLine ? `Stock take "${name}" saved.` : `Stock take "${name}" saved on this device. It will sync when you are back online.`);
+	} finally {
+		byId('count-complete-btn').disabled = false;
+	}
+}
+
+async function syncPendingCounts() {
+	if (!currentUser || !navigator.onLine) return;
+	const pending = await offlineStore('pending_counts', 'readonly', store => store.getAll());
+	for (const record of pending.filter(item => item.created_by === currentUser.id)) {
+		const { pending_offline, ...row } = record;
+		const { error } = await supabaseClient.from('stock_counts').insert(row);
+		if (error && error.code !== '23505') throw error;
+		await offlineStore('pending_counts', 'readwrite', store => store.delete(record.id));
+	}
+}
+
+async function loadStockCounts() {
+	if (!navigator.onLine) return;
+	await syncPendingCounts().catch(() => {});
+	const { data, error } = await supabaseClient.from('stock_counts').select(countColumns)
+		.order('created_at', { ascending: false }).limit(1000);
+	if (error) return;
+	stockCounts = data;
+	renderStockCounts();
+}
+
+function exportCountsToCSV() {
+	if (!stockCounts.length) {
+		setStatus('There are no stock counts to export.');
+		return;
+	}
+	const headers = ['Timestamp', 'Stock Take', 'Barcode', 'Part Name', 'Description', 'Counted Qty', 'Counted By'];
+	const rows = stockCounts.map(count => [count.created_at, count.count_name, count.barcode, count.part_name, count.description, count.counted_qty, count.counted_by || count.created_by]);
+	const csv = [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
+	const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = 'stock_counts.csv';
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+	setTimeout(() => URL.revokeObjectURL(url), 0);
+}

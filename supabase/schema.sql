@@ -65,6 +65,50 @@ drop policy if exists "Authenticated users can upload part photos" on storage.ob
 create policy "Authenticated users can upload part photos"
 	on storage.objects for insert to authenticated with check (bucket_id = 'part-photos');
 
+create table if not exists public.stock_counts (
+	id uuid primary key default gen_random_uuid(),
+	created_at timestamptz not null default now(),
+	count_name text not null check (length(trim(count_name)) > 0),
+	barcode text not null,
+	part_name text not null,
+	description text not null default '',
+	counted_qty integer not null check (counted_qty >= 0),
+	created_by uuid not null references auth.users(id),
+	counted_by text not null default ''
+);
+
+create or replace function public.set_count_email()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+	select users.email into new.counted_by from auth.users as users where users.id = new.created_by;
+	return new;
+end;
+$$;
+
+revoke all on function public.set_count_email() from public, anon, authenticated;
+
+drop trigger if exists set_count_email on public.stock_counts;
+create trigger set_count_email
+	before insert on public.stock_counts
+	for each row execute function public.set_count_email();
+
+alter table public.stock_counts enable row level security;
+
+drop policy if exists "Authenticated users can read stock counts" on public.stock_counts;
+create policy "Authenticated users can read stock counts"
+	on public.stock_counts for select to authenticated using (true);
+
+drop policy if exists "Users can add stock counts as themselves" on public.stock_counts;
+create policy "Users can add stock counts as themselves"
+	on public.stock_counts for insert to authenticated
+	with check (created_by = (select auth.uid()));
+
+grant select, insert on public.stock_counts to authenticated;
+
 alter table public.parts enable row level security;
 alter table public.assigned_parts enable row level security;
 

@@ -8,6 +8,7 @@
 - Camera scanning or manual entry of UPC, EAN, and GTIN barcodes.
 - Barcode lookup uses only your Supabase parts list; unknown barcodes can be added manually.
 - CSV export of the shared assignment log.
+- Stock take mode: scan parts to count them, adjust counts, and save to a shared stock count log with CSV export.
 - Offline access to the previously loaded catalog and assignment log, with queued assignment sync.
 
 The public UPCitemdb Explorer service allows 100 combined requests per day and up to 6 requests per minute; its free-tier limits are IP-based. Public lookup coverage is incomplete, especially for industrial parts; unmatched barcodes can be added manually.

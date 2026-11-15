@@ -71,6 +71,35 @@
 				</div>
 			</section>
 
+			<section class="text-gray-900 bg-white rounded shadow p-4 mb-4">
+				<h2 class="font-semibold mb-2">Stock take</h2>
+				<form id="count-form" class="grid md:grid-cols-3 gap-2 items-end">
+					<div class="md:col-span-2">
+						<label class="block font-semibold mb-1" for="count-name-input">Stock take name or location</label>
+						<input id="count-name-input" type="text" maxlength="200" required class="w-full border rounded px-2 py-2" placeholder="e.g. Shelf A3">
+					</div>
+					<button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Start stock take</button>
+				</form>
+				<div id="count-active" class="hidden">
+					<div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+						<p>Counting: <span id="active-count-name" class="font-semibold"></span>. Each scan adds 1 to the counted quantity.</p>
+						<button id="count-complete-btn" type="button" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50">Finish stock take</button>
+					</div>
+					<p id="count-empty" class="text-sm text-gray-600">No parts counted yet.</p>
+					<table class="min-w-full text-sm">
+						<thead>
+							<tr class="bg-gray-200">
+								<th class="text-left px-2 py-1">Barcode</th>
+								<th class="text-left px-2 py-1">Part Name</th>
+								<th class="text-left px-2 py-1">Counted Qty</th>
+								<th class="text-left px-2 py-1"></th>
+							</tr>
+						</thead>
+						<tbody id="count-items-body"></tbody>
+					</table>
+				</div>
+			</section>
+
 			<div class="grid md:grid-cols-2 gap-4 mb-4">
 				<section class="text-gray-900 bg-white rounded shadow p-4">
 					<h2 class="font-semibold mb-2">Scan or enter a barcode</h2>
@@ -131,6 +160,27 @@
 						</tr>
 					</thead>
 					<tbody id="logs-table-body"></tbody>
+				</table>
+			</section>
+
+			<div class="flex justify-end mb-2 mt-6">
+				<button id="export-counts-btn" type="button" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Export stock counts to CSV</button>
+			</div>
+			<section class="text-gray-900 bg-white rounded shadow p-4 overflow-x-auto">
+				<h2 class="font-semibold mb-2">Stock count log</h2>
+				<table class="min-w-full text-sm">
+					<thead>
+						<tr class="bg-gray-200">
+							<th class="text-left px-2 py-1">Timestamp</th>
+							<th class="text-left px-2 py-1">Stock Take</th>
+							<th class="text-left px-2 py-1">Sync Status</th>
+							<th class="text-left px-2 py-1">Barcode</th>
+							<th class="text-left px-2 py-1">Part Name</th>
+							<th class="text-left px-2 py-1">Counted Qty</th>
+							<th class="text-left px-2 py-1">Counted By</th>
+						</tr>
+					</thead>
+					<tbody id="counts-table-body"></tbody>
 				</table>
 			</section>
 		</section>
