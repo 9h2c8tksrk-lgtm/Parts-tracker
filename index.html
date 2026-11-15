@@ -9,9 +9,9 @@
 	<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 	<script src="config.js"></script>
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body class="bg-black text-white min-h-screen">
 	<main class="container mx-auto max-w-6xl p-4">
-		<h1 class="text-2xl font-bold mb-4 text-center">Part Assignment App</h1>
+		<h1 class="text-2xl font-bold mb-4 text-center text-white">Part Assignment App</h1>
 
 		<section id="setup-message" class="hidden bg-yellow-100 border border-yellow-400 rounded p-4 mb-4" role="alert"></section>
 
@@ -35,11 +35,11 @@
 				<p>Signed in as <span id="current-user" class="font-semibold"></span></p>
 				<button id="signout-btn" type="button" class="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700">Sign out</button>
 			</div>
-			<p id="connection-status" class="bg-yellow-100 border border-yellow-400 rounded p-3 mb-4" role="status"></p>
-			<p id="parts-count" class="text-sm text-gray-700 mb-2"></p>
+			<p id="connection-status" class="text-gray-900 bg-yellow-100 border border-yellow-400 rounded p-3 mb-4" role="status"></p>
+			<p id="parts-count" class="text-sm text-gray-300 mb-2"></p>
 			<p id="app-status" class="hidden bg-blue-100 border border-blue-300 rounded p-3 mb-4" role="status"></p>
 
-			<section class="bg-white rounded shadow p-4 mb-4">
+			<section class="text-gray-900 bg-white rounded shadow p-4 mb-4">
 				<form id="pick-form" class="grid md:grid-cols-3 gap-2 items-end">
 					<div>
 						<label class="block font-semibold mb-1" for="wo-input">Work order number</label>
@@ -72,7 +72,7 @@
 			</section>
 
 			<div class="grid md:grid-cols-2 gap-4 mb-4">
-				<section class="bg-white rounded shadow p-4">
+				<section class="text-gray-900 bg-white rounded shadow p-4">
 					<h2 class="font-semibold mb-2">Scan or enter a barcode</h2>
 					<div id="qr-reader" class="w-full"></div>
 					<button id="torch-btn" type="button" class="hidden mt-2 bg-yellow-500 text-white px-3 py-2 rounded hover:bg-yellow-600">Flash: on</button>
@@ -89,7 +89,7 @@
 					<p class="mt-2 text-sm">Barcode: <span id="barcode-value" class="text-blue-700 break-all"></span></p>
 				</section>
 
-				<section class="bg-white rounded shadow p-4">
+				<section class="text-gray-900 bg-white rounded shadow p-4">
 					<h2 class="font-semibold mb-2">Part details</h2>
 					<dl class="space-y-1 mb-4">
 						<div><dt class="inline font-semibold">Part name: </dt><dd id="part-name" class="inline"></dd></div>
@@ -109,7 +109,7 @@
 			<div class="flex justify-end mb-2">
 				<button id="export-btn" type="button" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Export to CSV</button>
 			</div>
-			<section class="bg-white rounded shadow p-4 overflow-x-auto">
+			<section class="text-gray-900 bg-white rounded shadow p-4 overflow-x-auto">
 				<h2 class="font-semibold mb-2">Shared assigned parts log</h2>
 				<table class="min-w-full text-sm">
 					<thead>
