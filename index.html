@@ -133,6 +133,12 @@
 						<label class="inline-block bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800 cursor-pointer" for="photo-input">Take / replace photo</label>
 						<input id="photo-input" type="file" accept="image/*" capture="environment" class="sr-only">
 					</div>
+					<div id="link-section" class="hidden border-t pt-3 mb-3">
+						<h3 class="font-semibold mb-2">Or add this barcode to an existing part</h3>
+						<label class="sr-only" for="link-search-input">Search existing parts</label>
+						<input id="link-search-input" type="search" autocomplete="off" class="w-full border rounded px-2 py-2" placeholder="Search by part name, description or barcode">
+						<ul id="link-results" class="mt-2 space-y-1"></ul>
+					</div>
 					<form id="new-part-form" class="hidden border-t pt-3">
 						<h3 class="font-semibold mb-2">Add this barcode to the shared parts list</h3>
 						<label class="block text-sm font-semibold mb-1" for="new-part-name">Part name</label>

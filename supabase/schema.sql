@@ -109,6 +109,26 @@ create policy "Users can add stock counts as themselves"
 
 grant select, insert on public.stock_counts to authenticated;
 
+create table if not exists public.part_barcodes (
+	alias text primary key check (length(alias) between 1 and 14),
+	barcode text not null references public.parts(barcode) on delete cascade,
+	created_by uuid not null references auth.users(id),
+	created_at timestamptz not null default now()
+);
+
+alter table public.part_barcodes enable row level security;
+
+drop policy if exists "Authenticated users can read part barcodes" on public.part_barcodes;
+create policy "Authenticated users can read part barcodes"
+	on public.part_barcodes for select to authenticated using (true);
+
+drop policy if exists "Users can add part barcodes as themselves" on public.part_barcodes;
+create policy "Users can add part barcodes as themselves"
+	on public.part_barcodes for insert to authenticated
+	with check (created_by = (select auth.uid()));
+
+grant select, insert on public.part_barcodes to authenticated;
+
 alter table public.parts enable row level security;
 alter table public.assigned_parts enable row level security;
 

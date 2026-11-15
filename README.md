@@ -8,6 +8,7 @@
 - Camera scanning or manual entry of UPC, EAN, and GTIN barcodes.
 - Barcode lookup uses only your Supabase parts list; unknown barcodes can be added manually.
 - CSV export of the shared assignment log.
+- Unknown scanned barcodes can be linked to an existing part so later scans find it.
 - Separate Stock take page (`#stock-take`): scan parts to count them, adjust counts, and save to a shared stock count log with CSV export.
 - Offline access to the previously loaded catalog and assignment log, with queued assignment sync.
 

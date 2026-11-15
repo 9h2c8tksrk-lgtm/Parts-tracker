@@ -11,6 +11,7 @@ let realtimeChannel;
 let lookupRequest = 0;
 let offlineDatabase;
 let stockCounts = [];
+let aliases = [];
 const countColumns = 'id, created_at, count_name, barcode, part_name, description, counted_qty, created_by, counted_by';
 const assignmentColumns = 'id, created_at, wo_number, asset_number, barcode, part_name, description, quantity, created_by, assigned_by';
 
@@ -48,6 +49,7 @@ function saveOfflineSnapshot(userId) {
 	return offlineStore('snapshots', 'readwrite', store => store.put({
 		userId,
 		parts,
+		aliases,
 		assignments,
 		savedAt: new Date().toISOString()
 	}));
@@ -56,6 +58,7 @@ function saveOfflineSnapshot(userId) {
 async function loadOfflineSnapshot(userId) {
 	const snapshot = await offlineStore('snapshots', 'readonly', store => store.get(userId));
 	parts = snapshot?.parts ?? [];
+	aliases = snapshot?.aliases ?? [];
 	assignments = snapshot?.assignments ?? [];
 	const pending = await offlineStore('pending_assignments', 'readonly', store => store.getAll());
 	const userPending = pending.filter(assignment => assignment.created_by === userId);
@@ -241,7 +244,16 @@ function renderPart(part) {
 	showPartPhoto(part);
 	byId('part-name').textContent = part?.part_name ?? '';
 	byId('part-desc').textContent = part?.description ?? '';
-	byId('new-part-form').classList.toggle('hidden', Boolean(part));
+	setNewPartUi(!part);
+}
+
+function setNewPartUi(show) {
+	byId('new-part-form').classList.toggle('hidden', !show);
+	byId('link-section').classList.toggle('hidden', !show);
+	if (!show) {
+		byId('link-search-input').value = '';
+		byId('link-results').replaceChildren();
+	}
 }
 
 function searchParts(event) {
@@ -288,7 +300,69 @@ function searchParts(event) {
 }
 
 function findPartByBarcode(barcode) {
-	return parts.find(part => part.barcode === barcode);
+	const direct = parts.find(part => part.barcode === barcode);
+	if (direct) return direct;
+	const alias = aliases.find(item => item.alias === barcode);
+	return alias ? parts.find(part => part.barcode === alias.barcode) : undefined;
+}
+
+function renderLinkResults() {
+	const terms = byId('link-search-input').value.toLowerCase().split(/\s+/).filter(Boolean);
+	const list = byId('link-results');
+	list.replaceChildren();
+	if (!terms.length) return;
+	const matches = parts.filter(part => {
+		const text = `${part.part_name} ${part.description} ${part.barcode}`.toLowerCase();
+		return terms.every(term => text.includes(term));
+	});
+	if (!matches.length) {
+		const item = document.createElement('li');
+		item.className = 'text-sm text-gray-600';
+		item.textContent = 'No matching parts.';
+		list.appendChild(item);
+		return;
+	}
+	matches.slice(0, 10).forEach(part => {
+		const item = document.createElement('li');
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'w-full text-left border rounded px-2 py-2 hover:bg-gray-100';
+		const name = document.createElement('span');
+		name.className = 'font-semibold';
+		name.textContent = part.part_name;
+		const detail = document.createElement('span');
+		detail.className = 'block text-sm text-gray-600';
+		detail.textContent = `${part.barcode}${part.description ? ` — ${part.description}` : ''}`;
+		btn.append(name, detail);
+		btn.addEventListener('click', () => {
+			linkBarcodeToPart(part).catch(error => setStatus(error.message, true));
+		});
+		item.appendChild(btn);
+		list.appendChild(item);
+	});
+}
+
+async function linkBarcodeToPart(part) {
+	const alias = byId('barcode-value').textContent;
+	if (!currentUser || !alias) return;
+	if (!navigator.onLine) {
+		setStatus('Linking a barcode to an existing part requires an internet connection.', true);
+		return;
+	}
+	const { data, error } = await supabaseClient.from('part_barcodes')
+		.insert({ alias, barcode: part.barcode, created_by: currentUser.id })
+		.select('alias, barcode')
+		.single();
+	if (error) {
+		setStatus(error.code === '23505'
+			? 'This barcode is already linked to a part. Reload and look it up again.'
+			: `Could not link the barcode: ${error.message}. Make sure the barcode link SQL has been run in Supabase.`, true);
+		return;
+	}
+	aliases.push(data);
+	await saveOfflineSnapshot(currentUser.id).catch(() => {});
+	setStatus(`Barcode ${alias} linked to ${part.part_name}.`);
+	await selectBarcode(alias, true);
 }
 
 async function fetchAllParts() {
@@ -336,6 +410,8 @@ async function loadSharedData() {
 		if (partsResult.error) throw partsResult.error;
 
 		parts = partsResult.data;
+		const aliasResult = await supabaseClient.from('part_barcodes').select('alias, barcode').limit(100000);
+		if (!aliasResult.error) aliases = aliasResult.data;
 		await mergePendingParts(currentUser.id);
 		byId('parts-count').textContent = `Parts available to look up: ${parts.length}`;
 		if (assignmentsResult.error) {
@@ -370,6 +446,7 @@ function displayAuth(session) {
 			realtimeChannel = undefined;
 		}
 		parts = [];
+		aliases = [];
 		byId('part-search-input').value = '';
 		byId('part-search-results').replaceChildren();
 		byId('parts-count').textContent = '';
@@ -382,7 +459,7 @@ function displayAuth(session) {
 		endCount();
 		stockCounts = [];
 		byId('counts-table-body').replaceChildren();
-		byId('new-part-form').classList.add('hidden');
+		setNewPartUi(false);
 		if (html5QrCode?.isScanning) {
 			html5QrCode.stop().catch(error => setStatus(`Could not stop the camera: ${error.message}`, true));
 		}
@@ -473,7 +550,7 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 		byId('barcode-value').textContent = '';
 		byId('part-name').textContent = '';
 		byId('part-desc').textContent = '';
-		byId('new-part-form').classList.add('hidden');
+		setNewPartUi(false);
 		setStatus(`Enter a barcode of 1 to ${maximumBarcodeLength} characters.`, true);
 		return;
 	}
@@ -495,7 +572,7 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 
 	byId('part-name').textContent = '';
 	byId('part-desc').textContent = '';
-	byId('new-part-form').classList.add('hidden');
+	setNewPartUi(false);
 
 	showUnknownBarcode(navigator.onLine
 		? 'Not found in your parts list. Enter the part details to add it.'
@@ -855,6 +932,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 		event.target.value = '';
 		savePartPhoto(file).catch(error => setStatus(error.message, true));
 	});
+	byId('link-search-input').addEventListener('input', renderLinkResults);
 	byId('part-search-form').addEventListener('submit', searchParts);
 	byId('part-search-input').addEventListener('input', searchParts);
 	byId('new-part-form').addEventListener('submit', event => {
