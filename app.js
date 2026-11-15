@@ -274,6 +274,8 @@ function setNewPartUi(show) {
 	if (!show) {
 		byId('link-search-input').value = '';
 		byId('link-results').replaceChildren();
+		byId('ocr-results').replaceChildren();
+		ocrRequest += 1;
 	}
 }
 
@@ -325,6 +327,97 @@ function findPartByBarcode(barcode) {
 	if (direct) return direct;
 	const alias = aliases.find(item => item.alias === barcode);
 	return alias ? parts.find(part => part.barcode === alias.barcode) : undefined;
+}
+
+let ocrRequest = 0;
+let tesseractLoading;
+
+function loadTesseract() {
+	if (window.Tesseract) return Promise.resolve(window.Tesseract);
+	tesseractLoading ??= new Promise((resolve, reject) => {
+		const script = document.createElement('script');
+		script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+		script.onload = () => resolve(window.Tesseract);
+		script.onerror = () => {
+			tesseractLoading = undefined;
+			reject(new Error('Text reading could not be loaded.'));
+		};
+		document.head.appendChild(script);
+	});
+	return tesseractLoading;
+}
+
+function captureCameraFrame() {
+	const video = byId('qr-reader').querySelector('video');
+	if (!video?.videoWidth) return null;
+	const canvas = document.createElement('canvas');
+	canvas.width = video.videoWidth;
+	canvas.height = video.videoHeight;
+	canvas.getContext('2d').drawImage(video, 0, 0);
+	return canvas;
+}
+
+function extractPartNumbers(text, barcode) {
+	const found = new Set();
+	for (const token of text.toUpperCase().split(/[\s,;:|()\[\]]+/)) {
+		const clean = token.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, '');
+		if (clean.length < 4 || clean.length > 20 || clean === barcode) continue;
+		if (!/\d/.test(clean) || !/^[A-Z0-9][A-Z0-9\-\/.]*$/.test(clean)) continue;
+		found.add(clean);
+	}
+	return [...found].slice(0, 12);
+}
+
+function renderOcrCandidates(candidates, message) {
+	const box = byId('ocr-results');
+	box.replaceChildren();
+	const note = document.createElement('p');
+	note.className = 'text-sm text-gray-600 mb-1';
+	note.textContent = message;
+	box.appendChild(note);
+	const row = document.createElement('div');
+	row.className = 'flex flex-wrap gap-2';
+	candidates.forEach(candidate => {
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.textContent = candidate;
+		btn.className = 'border rounded px-2 py-1 bg-gray-100 hover:bg-gray-200 font-mono text-sm';
+		btn.addEventListener('click', () => {
+			byId('link-search-input').value = candidate;
+			renderLinkResults();
+		});
+		row.appendChild(btn);
+	});
+	box.appendChild(row);
+}
+
+async function readPartNumbersFromImage(frame, barcode) {
+	const requestId = ++ocrRequest;
+	if (!frame) {
+		renderOcrCandidates([], 'The camera is not running, so the label text could not be read. Search by name instead.');
+		return;
+	}
+	if (!navigator.onLine) {
+		renderOcrCandidates([], 'Reading label text needs an internet connection. Search by name instead.');
+		return;
+	}
+	renderOcrCandidates([], 'Reading text from the label...');
+	try {
+		const tesseract = await loadTesseract();
+		const { data } = await tesseract.recognize(frame, 'eng');
+		if (requestId !== ocrRequest || byId('barcode-value').textContent !== barcode) return;
+		const candidates = extractPartNumbers(data.text, barcode);
+		renderOcrCandidates(candidates, candidates.length
+			? 'Part numbers read from the label. Tap one to search for the matching part:'
+			: 'No part number could be read. Hold the label steady and press "Read label text", or search by name.');
+		const match = candidates.find(candidate => findPartByBarcode(candidate));
+		if (match) {
+			byId('link-search-input').value = match;
+			renderLinkResults();
+		}
+	} catch (error) {
+		if (requestId === ocrRequest) renderOcrCandidates([], `Could not read the label: ${error.message}`);
+	}
 }
 
 function renderLinkResults() {
@@ -616,9 +709,11 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 	byId('part-desc').textContent = '';
 	setNewPartUi(false);
 
+	const frame = captureCameraFrame();
 	showUnknownBarcode(navigator.onLine
 		? 'Not found in your parts list. Enter the part details to add it.'
 		: 'Not found in the saved parts list. Enter the part details to save it on this device; it will upload when you are back online.');
+	if (frame) readPartNumbersFromImage(frame, barcode);
 }
 
 async function addPart(event) {
@@ -975,6 +1070,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 		savePartPhoto(file).catch(error => setStatus(error.message, true));
 	});
 	byId('link-search-input').addEventListener('input', renderLinkResults);
+	byId('ocr-btn').addEventListener('click', () => {
+		readPartNumbersFromImage(captureCameraFrame(), byId('barcode-value').textContent);
+	});
 	byId('part-search-form').addEventListener('submit', searchParts);
 	byId('part-search-input').addEventListener('input', searchParts);
 	byId('new-part-form').addEventListener('submit', event => {

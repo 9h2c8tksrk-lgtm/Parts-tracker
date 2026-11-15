@@ -9,6 +9,7 @@
 - Barcode lookup uses only your Supabase parts list; unknown barcodes can be added manually.
 - CSV export of the shared assignment log.
 - Unknown scanned barcodes can be linked to an existing part so later scans find it.
+- When a scanned barcode is unknown, the app can read the label text (OCR, online only) to suggest part numbers to link it to.
 - Separate Stock take page (`#stock-take`): scan parts to count them, adjust counts, and save to a shared stock count log with CSV export.
 - Offline access to the previously loaded catalog and assignment log, with queued assignment sync.
 
