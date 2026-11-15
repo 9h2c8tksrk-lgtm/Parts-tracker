@@ -597,8 +597,9 @@ async function startScanner() {
 			useBarCodeDetectorIfSupported: true,
 			verbose: false,
 			formatsToSupport: [
-				formats.EAN_13, formats.EAN_8, formats.UPC_A, formats.UPC_E,
-				formats.CODE_128, formats.CODE_39, formats.ITF, formats.QR_CODE, formats.DATA_MATRIX
+				formats.EAN_13, formats.EAN_8, formats.UPC_A, formats.UPC_E, formats.UPC_EAN_EXTENSION,
+				formats.CODE_128, formats.CODE_39, formats.CODE_93, formats.ITF, formats.CODABAR,
+				formats.QR_CODE, formats.DATA_MATRIX
 			]
 		});
 		const cameras = await Html5Qrcode.getCameras();
