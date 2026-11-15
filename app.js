@@ -21,11 +21,12 @@ function openOfflineDatabase() {
 	if (!('indexedDB' in window)) return Promise.reject(new Error('Offline storage is not supported by this browser.'));
 	if (offlineDatabase) return offlineDatabase;
 	offlineDatabase = new Promise((resolve, reject) => {
-		const request = indexedDB.open('parts-tracker-offline', 3);
+		const request = indexedDB.open('parts-tracker-offline', 4);
 		request.onupgradeneeded = () => {
 			const database = request.result;
 			if (!database.objectStoreNames.contains('snapshots')) database.createObjectStore('snapshots', { keyPath: 'userId' });
 			if (!database.objectStoreNames.contains('pending_assignments')) database.createObjectStore('pending_assignments', { keyPath: 'id' });
+			if (!database.objectStoreNames.contains('pending_aliases')) database.createObjectStore('pending_aliases', { keyPath: 'alias' });
 			if (!database.objectStoreNames.contains('pending_counts')) database.createObjectStore('pending_counts', { keyPath: 'id' });
 			if (!database.objectStoreNames.contains('pending_parts')) database.createObjectStore('pending_parts', { keyPath: 'barcode' });
 		};
@@ -67,8 +68,28 @@ async function loadOfflineSnapshot(userId) {
 	});
 	assignments.sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
 	await mergePendingParts(userId);
+	await mergePendingAliases(userId);
 	renderAssignments();
 	return Boolean(snapshot || userPending.length);
+}
+
+async function mergePendingAliases(userId) {
+	const pending = await offlineStore('pending_aliases', 'readonly', store => store.getAll()).catch(() => []);
+	pending.filter(item => item.created_by === userId).forEach(item => {
+		if (!aliases.some(saved => saved.alias === item.alias)) aliases.push({ alias: item.alias, barcode: item.barcode, pending_offline: true });
+	});
+}
+
+async function syncPendingAliases() {
+	if (!currentUser || !navigator.onLine) return;
+	const pending = await offlineStore('pending_aliases', 'readonly', store => store.getAll());
+	for (const item of pending.filter(entry => entry.created_by === currentUser.id)) {
+		const { error } = await supabaseClient.from('part_barcodes')
+			.insert({ alias: item.alias, barcode: item.barcode, created_by: item.created_by });
+		// 23505: already linked; 23503: the part no longer exists
+		if (error && error.code !== '23505' && error.code !== '23503') throw error;
+		await offlineStore('pending_aliases', 'readwrite', store => store.delete(item.alias));
+	}
 }
 
 async function mergePendingParts(userId) {
@@ -345,15 +366,34 @@ function renderLinkResults() {
 async function linkBarcodeToPart(part) {
 	const alias = byId('barcode-value').textContent;
 	if (!currentUser || !alias) return;
+	const record = { alias, barcode: part.barcode, created_by: currentUser.id };
+	const queueLink = async () => {
+		await offlineStore('pending_aliases', 'readwrite', store => store.put(record));
+		aliases.push({ alias, barcode: part.barcode, pending_offline: true });
+		await saveOfflineSnapshot(currentUser.id).catch(() => {});
+		setStatus(`Barcode ${alias} linked to ${part.part_name} on this device. It will upload when you are back online.`);
+		await selectBarcode(alias, true);
+	};
 	if (!navigator.onLine) {
-		setStatus('Linking a barcode to an existing part requires an internet connection.', true);
+		await queueLink();
 		return;
 	}
-	const { data, error } = await supabaseClient.from('part_barcodes')
-		.insert({ alias, barcode: part.barcode, created_by: currentUser.id })
-		.select('alias, barcode')
-		.single();
+	let result;
+	try {
+		result = await supabaseClient.from('part_barcodes').insert(record).select('alias, barcode').single();
+	} catch (error) {
+		if (isNetworkFailure(error)) {
+			await queueLink();
+			return;
+		}
+		throw error;
+	}
+	const { data, error } = result;
 	if (error) {
+		if (!navigator.onLine || isNetworkFailure(error)) {
+			await queueLink();
+			return;
+		}
 		setStatus(error.code === '23505'
 			? 'This barcode is already linked to a part. Reload and look it up again.'
 			: `Could not link the barcode: ${error.message}. Make sure the barcode link SQL has been run in Supabase.`, true);
@@ -394,6 +434,7 @@ async function loadSharedData() {
 		let syncError;
 		try {
 			await syncPendingParts();
+			await syncPendingAliases();
 			await syncPendingAssignments();
 		} catch (error) {
 			syncError = error;
@@ -412,6 +453,7 @@ async function loadSharedData() {
 		parts = partsResult.data;
 		const aliasResult = await supabaseClient.from('part_barcodes').select('alias, barcode').limit(100000);
 		if (!aliasResult.error) aliases = aliasResult.data;
+		await mergePendingAliases(currentUser.id);
 		await mergePendingParts(currentUser.id);
 		byId('parts-count').textContent = `Parts available to look up: ${parts.length}`;
 		if (assignmentsResult.error) {
