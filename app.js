@@ -865,6 +865,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 		completePick().catch(error => setStatus(error.message, true));
 	});
 	byId('export-btn').addEventListener('click', exportAssignmentsToCSV);
+	window.addEventListener('hashchange', applyView);
+	applyView();
 	byId('count-form').addEventListener('submit', startCount);
 	byId('count-complete-btn').addEventListener('click', () => {
 		finishCount().catch(error => setStatus(error.message, true));
@@ -1084,4 +1086,21 @@ function exportCountsToCSV() {
 	link.click();
 	link.remove();
 	setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+// ---- Page navigation ----
+function applyView() {
+	const view = location.hash === '#stock-take' ? 'stock' : 'pick';
+	document.querySelectorAll('[data-view]').forEach(element => {
+		element.classList.toggle('hidden', element.dataset.view !== view);
+	});
+	[['nav-pick', 'pick'], ['nav-stock', 'stock']].forEach(([id, name]) => {
+		const active = name === view;
+		byId(id).classList.toggle('bg-blue-600', active);
+		byId(id).classList.toggle('text-white', active);
+		byId(id).classList.toggle('bg-white', !active);
+		byId(id).classList.toggle('text-gray-900', !active);
+		byId(id).setAttribute('aria-current', active ? 'page' : 'false');
+	});
+	document.title = view === 'stock' ? 'Stock Take' : 'Part Assignment App';
 }

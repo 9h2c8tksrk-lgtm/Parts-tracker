@@ -35,11 +35,15 @@
 				<p>Signed in as <span id="current-user" class="font-semibold"></span></p>
 				<button id="signout-btn" type="button" class="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700">Sign out</button>
 			</div>
+			<nav class="flex gap-2 mb-4" aria-label="Pages">
+				<a id="nav-pick" href="#pick" class="px-4 py-2 rounded font-semibold">Pick parts</a>
+				<a id="nav-stock" href="#stock-take" class="px-4 py-2 rounded font-semibold">Stock take</a>
+			</nav>
 			<p id="connection-status" class="text-gray-900 bg-yellow-100 border border-yellow-400 rounded p-3 mb-4" role="status"></p>
 			<p id="parts-count" class="text-sm text-gray-300 mb-2"></p>
 			<p id="app-status" class="hidden bg-blue-100 border border-blue-300 rounded p-3 mb-4" role="status"></p>
 
-			<section class="text-gray-900 bg-white rounded shadow p-4 mb-4">
+			<section data-view="pick" class="text-gray-900 bg-white rounded shadow p-4 mb-4">
 				<form id="pick-form" class="grid md:grid-cols-3 gap-2 items-end">
 					<div>
 						<label class="block font-semibold mb-1" for="wo-input">Work order number</label>
@@ -71,7 +75,7 @@
 				</div>
 			</section>
 
-			<section class="text-gray-900 bg-white rounded shadow p-4 mb-4">
+			<section data-view="stock" class="text-gray-900 bg-white rounded shadow p-4 mb-4">
 				<h2 class="font-semibold mb-2">Stock take</h2>
 				<form id="count-form" class="grid md:grid-cols-3 gap-2 items-end">
 					<div class="md:col-span-2">
@@ -140,10 +144,10 @@
 				</section>
 			</div>
 
-			<div class="flex justify-end mb-2">
+			<div data-view="pick" class="flex justify-end mb-2">
 				<button id="export-btn" type="button" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Export to CSV</button>
 			</div>
-			<section class="text-gray-900 bg-white rounded shadow p-4 overflow-x-auto">
+			<section data-view="pick" class="text-gray-900 bg-white rounded shadow p-4 overflow-x-auto">
 				<h2 class="font-semibold mb-2">Shared assigned parts log</h2>
 				<table class="min-w-full text-sm">
 					<thead>
@@ -163,10 +167,10 @@
 				</table>
 			</section>
 
-			<div class="flex justify-end mb-2 mt-6">
+			<div data-view="stock" class="flex justify-end mb-2">
 				<button id="export-counts-btn" type="button" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Export stock counts to CSV</button>
 			</div>
-			<section class="text-gray-900 bg-white rounded shadow p-4 overflow-x-auto">
+			<section data-view="stock" class="text-gray-900 bg-white rounded shadow p-4 overflow-x-auto">
 				<h2 class="font-semibold mb-2">Stock count log</h2>
 				<table class="min-w-full text-sm">
 					<thead>
