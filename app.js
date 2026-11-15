@@ -420,6 +420,43 @@ async function readPartNumbersFromImage(frame, barcode) {
 	}
 }
 
+let ocrWorker;
+let textScanTimer;
+let textScanBusy = false;
+const textScanIntervalMs = 1500;
+
+function findPartByText(candidate) {
+	const upper = candidate.toUpperCase();
+	return parts.find(part => part.barcode.toUpperCase() === upper)
+		?? findPartByBarcode(aliases.find(item => item.alias.toUpperCase() === upper)?.alias ?? '');
+}
+
+async function scanTextOnce() {
+	if (textScanBusy || !currentUser || !navigator.onLine || !html5QrCode?.isScanning) return;
+	if (!byId('text-scan-toggle').checked) return;
+	const frame = captureCameraFrame();
+	if (!frame) return;
+	textScanBusy = true;
+	try {
+		const tesseract = await loadTesseract();
+		ocrWorker ??= await tesseract.createWorker('eng');
+		const { data } = await ocrWorker.recognize(frame);
+		const match = extractPartNumbers(data.text, '').map(findPartByText).find(Boolean);
+		if (match && (activePick || activeCount || match.barcode !== byId('barcode-value').textContent)) {
+			await selectBarcode(match.barcode, Boolean(activePick || activeCount) ? false : true);
+		}
+	} catch {
+		// Text reading is best effort; barcode scanning keeps working
+	} finally {
+		textScanBusy = false;
+	}
+}
+
+function startTextScanning() {
+	clearInterval(textScanTimer);
+	textScanTimer = setInterval(scanTextOnce, textScanIntervalMs);
+}
+
 function renderLinkResults() {
 	const terms = byId('link-search-input').value.toLowerCase().split(/\s+/).filter(Boolean);
 	const list = byId('link-results');
@@ -1017,6 +1054,7 @@ async function startScanner() {
 			() => {}
 		);
 		await enableTorch();
+		startTextScanning();
 	} catch (error) {
 		setStatus(`Camera unavailable: ${error?.message || error || 'permission denied or no camera found'}. You can enter a barcode manually.`);
 	} finally {
@@ -1070,6 +1108,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 		savePartPhoto(file).catch(error => setStatus(error.message, true));
 	});
 	byId('link-search-input').addEventListener('input', renderLinkResults);
+	byId('text-scan-toggle').addEventListener('change', () => {
+		setStatus(byId('text-scan-toggle').checked ? 'Reading printed part numbers as well as barcodes.' : 'Reading barcodes only.');
+	});
 	byId('ocr-btn').addEventListener('click', () => {
 		readPartNumbersFromImage(captureCameraFrame(), byId('barcode-value').textContent);
 	});
