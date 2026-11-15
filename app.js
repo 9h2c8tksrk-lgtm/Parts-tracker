@@ -567,6 +567,27 @@ async function authenticate(mode) {
 	setStatus('Authentication successful.', false, 'auth-status');
 }
 
+async function enableTorch() {
+	const btn = byId('torch-btn');
+	try {
+		const torch = html5QrCode.getRunningTrackCameraCapabilities().torchFeature();
+		if (!torch.isSupported()) throw new Error('unsupported');
+		await torch.apply(true);
+		btn.textContent = 'Flash: on';
+		btn.dataset.on = '1';
+		btn.onclick = async () => {
+			const turnOn = btn.dataset.on !== '1';
+			await torch.apply(turnOn).catch(() => {});
+			btn.dataset.on = turnOn ? '1' : '';
+			btn.textContent = turnOn ? 'Flash: on' : 'Flash: off';
+		};
+		btn.classList.remove('hidden');
+	} catch {
+		btn.classList.add('hidden');
+		setStatus('Camera flash is not available on this device or browser. You can still scan.');
+	}
+}
+
 async function startScanner() {
 	if (!currentUser || scannerStarting || typeof Html5Qrcode === 'undefined' || html5QrCode?.isScanning) return;
 	scannerStarting = true;
@@ -576,9 +597,8 @@ async function startScanner() {
 			useBarCodeDetectorIfSupported: true,
 			verbose: false,
 			formatsToSupport: [
-				formats.EAN_13, formats.EAN_8, formats.UPC_A, formats.UPC_E, formats.UPC_EAN_EXTENSION,
-				formats.CODE_128, formats.CODE_39, formats.CODE_93, formats.ITF, formats.CODABAR,
-				formats.QR_CODE, formats.DATA_MATRIX
+				formats.EAN_13, formats.EAN_8, formats.UPC_A, formats.UPC_E,
+				formats.CODE_128, formats.CODE_39, formats.ITF, formats.QR_CODE, formats.DATA_MATRIX
 			]
 		});
 		const cameras = await Html5Qrcode.getCameras();
@@ -590,7 +610,7 @@ async function startScanner() {
 		await html5QrCode.start(
 			{ facingMode: 'environment' },
 			{
-				fps: 25,
+				fps: 30,
 				// html5-qrcode only accepts a single key in the first argument; extra constraints go here
 				videoConstraints: {
 					facingMode: 'environment',
@@ -605,6 +625,7 @@ async function startScanner() {
 			decodedText => selectBarcode(decodedText),
 			() => {}
 		);
+		await enableTorch();
 	} catch (error) {
 		setStatus(`Camera unavailable: ${error?.message || error || 'permission denied or no camera found'}. You can enter a barcode manually.`);
 	} finally {
