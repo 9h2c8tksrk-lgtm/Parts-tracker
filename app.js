@@ -646,8 +646,8 @@ function displayAuth(session) {
 function updateConnectionStatus() {
 	const status = byId('connection-status');
 	status.textContent = navigator.onLine
-		? 'Online: data syncs with the shared server. Cached data is available for offline use.'
-		: 'Offline: using saved data. Assignments are queued on this device until connection returns.';
+		? 'Online'
+		: 'Offline: saving on this device';
 	status.classList.toggle('bg-yellow-100', !navigator.onLine);
 	status.classList.toggle('border-yellow-400', !navigator.onLine);
 	status.classList.toggle('bg-green-100', navigator.onLine);
@@ -1349,17 +1349,16 @@ function exportCountsToCSV() {
 
 // ---- Page navigation ----
 function applyView() {
-	const view = location.hash === '#stock-take' ? 'stock' : 'pick';
+	const view = location.hash === '#stock-take' ? 'stock' : location.hash === '#logs' ? 'logs' : 'pick';
 	document.querySelectorAll('[data-view]').forEach(element => {
-		element.classList.toggle('hidden', element.dataset.view !== view);
+		element.classList.toggle('hidden', !element.dataset.view.split(' ').includes(view));
 	});
-	[['nav-pick', 'pick'], ['nav-stock', 'stock']].forEach(([id, name]) => {
+	[['nav-pick', 'pick'], ['nav-stock', 'stock'], ['nav-logs', 'logs']].forEach(([id, name]) => {
 		const active = name === view;
 		byId(id).classList.toggle('bg-blue-600', active);
 		byId(id).classList.toggle('text-white', active);
-		byId(id).classList.toggle('bg-white', !active);
-		byId(id).classList.toggle('text-gray-900', !active);
+		byId(id).classList.toggle('text-gray-300', !active);
 		byId(id).setAttribute('aria-current', active ? 'page' : 'false');
 	});
-	document.title = view === 'stock' ? 'Stock Take' : 'Part Assignment App';
+	document.title = { stock: 'Stock Take', logs: 'Logs' }[view] ?? 'Pick Parts';
 }
