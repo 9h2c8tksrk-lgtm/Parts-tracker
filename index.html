@@ -81,6 +81,11 @@
 						<input id="barcode-input" type="text" inputmode="numeric" autocomplete="off" class="flex-1 min-w-0 border rounded px-2 py-2" placeholder="Enter UPC, EAN, or GTIN">
 						<button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Look up</button>
 					</form>
+					<form id="part-search-form" class="mt-3">
+						<label class="block text-sm font-semibold mb-1" for="part-search-input">Or search by part name or description</label>
+						<input id="part-search-input" type="search" autocomplete="off" class="w-full border rounded px-2 py-2" placeholder="e.g. fuel filter">
+					</form>
+					<ul id="part-search-results" class="mt-2 space-y-1"></ul>
 					<p class="mt-2 text-sm">Barcode: <span id="barcode-value" class="text-blue-700 break-all"></span></p>
 				</section>
 

@@ -18,11 +18,12 @@ function openOfflineDatabase() {
 	if (!('indexedDB' in window)) return Promise.reject(new Error('Offline storage is not supported by this browser.'));
 	if (offlineDatabase) return offlineDatabase;
 	offlineDatabase = new Promise((resolve, reject) => {
-		const request = indexedDB.open('parts-tracker-offline', 1);
+		const request = indexedDB.open('parts-tracker-offline', 2);
 		request.onupgradeneeded = () => {
 			const database = request.result;
-			database.createObjectStore('snapshots', { keyPath: 'userId' });
-			database.createObjectStore('pending_assignments', { keyPath: 'id' });
+			if (!database.objectStoreNames.contains('snapshots')) database.createObjectStore('snapshots', { keyPath: 'userId' });
+			if (!database.objectStoreNames.contains('pending_assignments')) database.createObjectStore('pending_assignments', { keyPath: 'id' });
+			if (!database.objectStoreNames.contains('pending_parts')) database.createObjectStore('pending_parts', { keyPath: 'barcode' });
 		};
 		request.onsuccess = () => resolve(request.result);
 		request.onerror = () => reject(request.error);
@@ -59,8 +60,40 @@ async function loadOfflineSnapshot(userId) {
 		if (!assignments.some(saved => saved.id === assignment.id)) assignments.push(assignment);
 	});
 	assignments.sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
+	await mergePendingParts(userId);
 	renderAssignments();
 	return Boolean(snapshot || userPending.length);
+}
+
+async function mergePendingParts(userId) {
+	const pending = await offlineStore('pending_parts', 'readonly', store => store.getAll()).catch(() => []);
+	pending.filter(part => part.created_by === userId).forEach(part => {
+		if (!findPartByBarcode(part.barcode)) {
+			parts.push({ barcode: part.barcode, part_name: part.part_name, description: part.description, pending_offline: true });
+		}
+	});
+}
+
+async function queueOfflinePart(part) {
+	await offlineStore('pending_parts', 'readwrite', store => store.put({ ...part, created_by: currentUser.id }));
+	const queued = { ...part, pending_offline: true };
+	parts.push(queued);
+	await saveOfflineSnapshot(currentUser.id).catch(() => {});
+	return queued;
+}
+
+async function syncPendingParts() {
+	if (!currentUser || !navigator.onLine) return;
+	const pending = await offlineStore('pending_parts', 'readonly', store => store.getAll());
+	for (const part of pending.filter(item => item.created_by === currentUser.id)) {
+		const { error } = await supabaseClient.from('parts').insert({
+			barcode: part.barcode,
+			part_name: part.part_name,
+			description: part.description
+		});
+		if (error && error.code !== '23505') throw error;
+		await offlineStore('pending_parts', 'readwrite', store => store.delete(part.barcode));
+	}
 }
 
 async function queueOfflineAssignment(assignment) {
@@ -144,6 +177,49 @@ function renderPart(part) {
 	byId('new-part-form').classList.toggle('hidden', Boolean(part));
 }
 
+function searchParts(event) {
+	event?.preventDefault();
+	const terms = byId('part-search-input').value.toLowerCase().split(/\s+/).filter(Boolean);
+	const list = byId('part-search-results');
+	list.replaceChildren();
+	if (!terms.length) return;
+	const matches = parts.filter(part => {
+		const text = `${part.part_name} ${part.description} ${part.barcode}`.toLowerCase();
+		return terms.every(term => text.includes(term));
+	});
+	if (!matches.length) {
+		const item = document.createElement('li');
+		item.className = 'text-sm text-gray-600';
+		item.textContent = 'No matching parts.';
+		list.appendChild(item);
+		return;
+	}
+	matches.slice(0, 20).forEach(part => {
+		const item = document.createElement('li');
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'w-full text-left border rounded px-2 py-2 hover:bg-gray-100';
+		const name = document.createElement('span');
+		name.className = 'font-semibold';
+		name.textContent = part.part_name;
+		const detail = document.createElement('span');
+		detail.className = 'block text-sm text-gray-600';
+		detail.textContent = `${part.barcode}${part.description ? ` — ${part.description}` : ''}`;
+		btn.append(name, detail);
+		btn.addEventListener('click', () => {
+			selectBarcode(part.barcode, true).catch(error => setStatus(error.message, true));
+		});
+		item.appendChild(btn);
+		list.appendChild(item);
+	});
+	if (matches.length > 20) {
+		const item = document.createElement('li');
+		item.className = 'text-sm text-gray-600';
+		item.textContent = `Showing 20 of ${matches.length} matches. Type more to narrow the search.`;
+		list.appendChild(item);
+	}
+}
+
 function findPartByBarcode(barcode) {
 	return parts.find(part => part.barcode === barcode);
 }
@@ -176,6 +252,7 @@ async function loadSharedData() {
 		await loadOfflineSnapshot(currentUser.id).catch(() => false);
 		let syncError;
 		try {
+			await syncPendingParts();
 			await syncPendingAssignments();
 		} catch (error) {
 			syncError = error;
@@ -192,6 +269,7 @@ async function loadSharedData() {
 		if (partsResult.error) throw partsResult.error;
 
 		parts = partsResult.data;
+		await mergePendingParts(currentUser.id);
 		byId('parts-count').textContent = `Parts available to look up: ${parts.length}`;
 		if (assignmentsResult.error) {
 			syncError ??= assignmentsResult.error;
@@ -224,6 +302,8 @@ function displayAuth(session) {
 			realtimeChannel = undefined;
 		}
 		parts = [];
+		byId('part-search-input').value = '';
+		byId('part-search-results').replaceChildren();
 		byId('parts-count').textContent = '';
 		assignments = [];
 		renderPart(null);
@@ -346,17 +426,14 @@ async function selectBarcode(rawBarcode, forceLookup = false) {
 	byId('part-desc').textContent = '';
 	byId('new-part-form').classList.add('hidden');
 
-	showUnknownBarcode('Not found in your parts list. Enter the part details to add it.');
+	showUnknownBarcode(navigator.onLine
+		? 'Not found in your parts list. Enter the part details to add it.'
+		: 'Not found in the saved parts list. Enter the part details to save it on this device; it will upload when you are back online.');
 }
 
 async function addPart(event) {
 	event.preventDefault();
 	if (!currentUser || !byId('barcode-value').textContent) return;
-	if (!navigator.onLine) {
-		setStatus('Adding a new part requires an internet connection.', true);
-		return;
-	}
-
 	const barcode = byId('barcode-value').textContent;
 	const part = {
 		barcode,
@@ -368,13 +445,36 @@ async function addPart(event) {
 		return;
 	}
 
-	const { data, error } = await supabaseClient.from('parts').insert(part)
-		.select('barcode, part_name, description')
-		.single();
+	const saveOffline = async () => {
+		const queued = await queueOfflinePart(part);
+		renderPart(queued);
+		setStatus('Part saved on this device. It will be added to the shared list when you are back online.');
+		addToPick(queued, false);
+	};
+	if (!navigator.onLine) {
+		await saveOffline();
+		return;
+	}
+
+	let result;
+	try {
+		result = await supabaseClient.from('parts').insert(part)
+			.select('barcode, part_name, description')
+			.single();
+	} catch (error) {
+		if (isNetworkFailure(error)) {
+			await saveOffline();
+			return;
+		}
+		throw error;
+	}
+	const { data, error } = result;
 	if (error) {
-		setStatus(!navigator.onLine
-			? 'Adding a new part requires an internet connection.'
-			: error.code === '23505'
+		if (!navigator.onLine || isNetworkFailure(error)) {
+			await saveOffline();
+			return;
+		}
+		setStatus(error.code === '23505'
 			? 'Another user has already added this barcode. Refresh the shared list and look it up again.'
 			: `Could not add the part: ${error.message}`, true);
 		return;
@@ -674,6 +774,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 		event.preventDefault();
 		selectBarcode(byId('barcode-input').value, true).catch(error => setStatus(error.message, true));
 	});
+	byId('part-search-form').addEventListener('submit', searchParts);
+	byId('part-search-input').addEventListener('input', searchParts);
 	byId('new-part-form').addEventListener('submit', event => {
 		addPart(event).catch(error => setStatus(error.message, true));
 	});
