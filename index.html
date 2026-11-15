@@ -95,6 +95,11 @@
 						<div><dt class="inline font-semibold">Part name: </dt><dd id="part-name" class="inline"></dd></div>
 						<div><dt class="inline font-semibold">Description: </dt><dd id="part-desc" class="inline"></dd></div>
 					</dl>
+					<img id="part-photo" alt="Photo of the selected part" class="hidden w-full max-w-xs rounded border mb-3">
+					<div id="photo-controls" class="hidden mb-4">
+						<label class="inline-block bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800 cursor-pointer" for="photo-input">Take / replace photo</label>
+						<input id="photo-input" type="file" accept="image/*" capture="environment" class="sr-only">
+					</div>
 					<form id="new-part-form" class="hidden border-t pt-3">
 						<h3 class="font-semibold mb-2">Add this barcode to the shared parts list</h3>
 						<label class="block text-sm font-semibold mb-1" for="new-part-name">Part name</label>

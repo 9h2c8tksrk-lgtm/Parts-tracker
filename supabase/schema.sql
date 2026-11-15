@@ -50,6 +50,21 @@ create trigger set_assignment_email
 	before insert on public.assigned_parts
 	for each row execute function public.set_assignment_email();
 
+alter table public.parts
+	add column if not exists photo_path text;
+
+insert into storage.buckets (id, name, public)
+values ('part-photos', 'part-photos', false)
+on conflict (id) do nothing;
+
+drop policy if exists "Authenticated users can read part photos" on storage.objects;
+create policy "Authenticated users can read part photos"
+	on storage.objects for select to authenticated using (bucket_id = 'part-photos');
+
+drop policy if exists "Authenticated users can upload part photos" on storage.objects;
+create policy "Authenticated users can upload part photos"
+	on storage.objects for insert to authenticated with check (bucket_id = 'part-photos');
+
 alter table public.parts enable row level security;
 alter table public.assigned_parts enable row level security;
 

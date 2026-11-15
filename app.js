@@ -170,8 +170,72 @@ function renderAssignments() {
 	});
 }
 
+let photoRequest = 0;
+
+async function showPartPhoto(part) {
+	photoRequest += 1;
+	const requestId = photoRequest;
+	const img = byId('part-photo');
+	img.classList.add('hidden');
+	img.removeAttribute('src');
+	byId('photo-controls').classList.toggle('hidden', !part || part.pending_offline);
+	if (!part?.photo_path || !navigator.onLine) return;
+	const { data } = await supabaseClient.storage.from('part-photos').createSignedUrl(part.photo_path, 3600).catch(() => ({}));
+	if (requestId !== photoRequest || !data?.signedUrl) return;
+	img.src = data.signedUrl;
+	img.classList.remove('hidden');
+}
+
+function resizeImage(file, maxSize = 1280) {
+	return new Promise((resolve, reject) => {
+		const url = URL.createObjectURL(file);
+		const image = new Image();
+		image.onload = () => {
+			const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+			const canvas = document.createElement('canvas');
+			canvas.width = Math.round(image.width * scale);
+			canvas.height = Math.round(image.height * scale);
+			canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+			URL.revokeObjectURL(url);
+			canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not process the photo.')), 'image/jpeg', 0.8);
+		};
+		image.onerror = () => {
+			URL.revokeObjectURL(url);
+			reject(new Error('Could not read the photo.'));
+		};
+		image.src = url;
+	});
+}
+
+async function savePartPhoto(file) {
+	const part = selectedPart;
+	if (!currentUser || !part || !file) return;
+	if (!navigator.onLine) {
+		setStatus('Saving a photo requires an internet connection.', true);
+		return;
+	}
+	setStatus('Uploading photo...');
+	const blob = await resizeImage(file);
+	const path = `${crypto.randomUUID()}.jpg`;
+	const upload = await supabaseClient.storage.from('part-photos').upload(path, blob, { contentType: 'image/jpeg' });
+	if (upload.error) {
+		setStatus(`Could not upload the photo: ${upload.error.message}. Make sure the photo SQL has been run in Supabase.`, true);
+		return;
+	}
+	const { error } = await supabaseClient.from('parts').update({ photo_path: path }).eq('barcode', part.barcode);
+	if (error) {
+		setStatus(`Could not save the photo: ${error.message}`, true);
+		return;
+	}
+	part.photo_path = path;
+	await saveOfflineSnapshot(currentUser.id).catch(() => {});
+	setStatus('Photo saved.');
+	if (selectedPart === part) showPartPhoto(part);
+}
+
 function renderPart(part) {
 	selectedPart = part;
+	showPartPhoto(part);
 	byId('part-name').textContent = part?.part_name ?? '';
 	byId('part-desc').textContent = part?.description ?? '';
 	byId('new-part-form').classList.toggle('hidden', Boolean(part));
@@ -229,7 +293,7 @@ async function fetchAllParts() {
 	const all = [];
 	for (let from = 0; ; from += pageSize) {
 		const { data, error } = await supabaseClient.from('parts')
-			.select('barcode, part_name, description')
+			.select('*')
 			.order('barcode')
 			.range(from, from + pageSize - 1);
 		if (error) return { data: null, error };
@@ -773,6 +837,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 	byId('barcode-form').addEventListener('submit', event => {
 		event.preventDefault();
 		selectBarcode(byId('barcode-input').value, true).catch(error => setStatus(error.message, true));
+	});
+	byId('photo-input').addEventListener('change', event => {
+		const file = event.target.files[0];
+		event.target.value = '';
+		savePartPhoto(file).catch(error => setStatus(error.message, true));
 	});
 	byId('part-search-form').addEventListener('submit', searchParts);
 	byId('part-search-input').addEventListener('input', searchParts);
